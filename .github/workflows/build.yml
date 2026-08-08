@@ -53,7 +53,11 @@ jobs:
           fi
           echo "OK: real UI build present"
 
-      - name: Build single binary
+      - name: Build single windows binary
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: "0"
         run: go build -trimpath -o diffchecker.exe .
         working-directory: .
 
