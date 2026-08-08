@@ -20,7 +20,7 @@ export type JobOptionsInput = {
 
 export type Change = {
   rowNumber: number;
-  column: string;
+  column: number;
   ref: string;
   old: string;
   new: string;

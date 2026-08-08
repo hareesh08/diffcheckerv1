@@ -15,18 +15,18 @@ type Row struct {
 }
 
 type Change struct {
-	RowNumber int
-	Column    int
-	Ref       string
-	Old       string
-	New       string
-	Type      string
+	RowNumber int    `json:"rowNumber"`
+	Column    int    `json:"column"`
+	Ref       string `json:"ref"`
+	Old       string `json:"old"`
+	New       string `json:"new"`
+	Type      string `json:"type"`
 }
 
 type ResultRow struct {
-	RowNumber int
-	Status    string
-	Changes   []Change
+	RowNumber int      `json:"rowNumber"`
+	Status    string   `json:"status"`
+	Changes   []Change `json:"changes"`
 }
 
 type Summary struct {
