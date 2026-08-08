@@ -1,0 +1,17 @@
+# Built binary
+diffchecker.exe
+*.exe
+
+# Runtime data
+uploads/
+jobs/
+.commandcode/
+
+# Go
+*.db
+*.db-wal
+*.db-shm
+
+# OS
+.DS_Store
+Thumbs.db

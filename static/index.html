@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Diff Checker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; background: #0d1117; color: #e6edf3; }
+    header { padding: 12px 24px; border-bottom: 1px solid #21262d; display: flex; align-items: center; gap: 20px; }
+    header h1 { font-size: 20px; font-weight: 600; color: #f78166; }
+    nav { display: flex; gap: 0; }
+    nav a {
+      padding: 8px 18px; font-size: 13px; font-weight: 500; color: #8b949e;
+      background: transparent; border: none; cursor: pointer; border-radius: 6px;
+      text-decoration: none; transition: background .15s;
+    }
+    nav a:hover { background: #21262d; color: #e6edf3; }
+    nav a.active { background: #f78166; color: #0d1117; font-weight: 600; }
+    main { padding: 20px 24px; max-width: 1600px; margin: 0 auto; }
+    .hidden { display: none !important; }
+    .row { display: flex; gap: 16px; margin-bottom: 16px; }
+    .col { flex: 1; }
+    label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: #8b949e; margin-bottom: 6px; }
+    textarea {
+      width: 100%; height: 240px; resize: vertical; padding: 10px 12px;
+      background: #161b22; color: #e6edf3; border: 1px solid #30363d; border-radius: 6px;
+      font-family: "SF Mono", Consolas, "Courier New", monospace; font-size: 13px; line-height: 1.5; outline: none;
+    }
+    textarea:focus { border-color: #f78166; }
+    .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+    button {
+      background: #f78166; color: #0d1117; border: none; padding: 8px 18px; border-radius: 6px;
+      font-weight: 600; font-size: 13px; cursor: pointer;
+    }
+    button:hover { background: #ff9d84; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.secondary { background: #21262d; color: #e6edf3; border: 1px solid #30363d; }
+    button.secondary:hover { background: #30363d; }
+    .stats { font-size: 13px; color: #8b949e; }
+    .stats b { color: #e6edf3; }
+    #result { display: none; border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+    #result.show { display: block; }
+    .diff-grid { display: grid; grid-template-columns: 1fr 1fr; }
+    .side-head { display: flex; justify-content: space-between; padding: 8px 12px; font-size: 12px; color: #8b949e; border-bottom: 1px solid #30363d; background: #161b22; }
+    .side-head + .side-head { border-left: 1px solid #30363d; }
+    .side { font-family: "SF Mono", Consolas, monospace; font-size: 13px; line-height: 1.5; min-height: 120px; }
+    .line { display: flex; white-space: pre-wrap; word-break: break-word; }
+    .ln { flex: 0 0 40px; text-align: right; padding: 0 8px; color: #484f58; user-select: none; border-right: 1px solid #21262d; background: #0d1117; }
+    .content { padding: 0 10px; flex: 1; }
+    .add { background: #0f2a1d; color: #7ee787; }
+    .add .content { background: #12261c; }
+    .del { background: #2d1418; color: #ff7b72; }
+    .del .content { background: #2d1418; }
+    .empty { background: #161b22; }
+    .status { margin-top: 12px; font-size: 13px; }
+    .status .match { color: #7ee787; }
+    .status .differ { color: #ff7b72; }
+
+    /* Excel styles */
+    .upload-zone {
+      border: 2px dashed #30363d; border-radius: 10px; padding: 40px 20px;
+      text-align: center; cursor: pointer; transition: border-color .2s, background .2s;
+      min-height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .upload-zone:hover, .upload-zone.dragover { border-color: #f78166; background: rgba(247,129,102,.05); }
+    .upload-zone .icon { font-size: 40px; margin-bottom: 12px; color: #f78166; }
+    .upload-zone p { color: #8b949e; font-size: 13px; margin-bottom: 4px; }
+    .upload-zone .formats { font-size: 11px; color: #484f58; margin-top: 6px; }
+    .upload-zone input { display: none; }
+    .file-info { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; margin-top: 12px; }
+    .file-info .name { font-size: 13px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-info .size { font-size: 11px; color: #8b949e; }
+    .file-info .remove { background: none; border: none; color: #8b949e; cursor: pointer; padding: 4px; font-size: 16px; }
+    .file-info .remove:hover { color: #ff7b72; }
+    .sheet-select { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    .sheet-select label { margin: 0; }
+    .sheet-select select, .toolbar select {
+      background: #161b22; color: #e6edf3; border: 1px solid #30363d; border-radius: 4px;
+      padding: 6px 8px; font-size: 13px;
+    }
+
+    /* Progress */
+    .progress-box { border: 1px solid #30363d; border-radius: 8px; padding: 20px; background: #161b22; margin-bottom: 16px; }
+    .progress-label { font-size: 13px; color: #8b949e; margin-bottom: 10px; }
+    .progress-track { height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .progress-fill { height: 100%; background: #f78166; width: 0; transition: width .3s; }
+    .progress-meta { display: flex; justify-content: space-between; align-items: center; }
+
+    /* Spreadsheet table */
+    .spreadsheet-wrap { border: 1px solid #30363d; border-radius: 6px; overflow: hidden; }
+    .summary-bar {
+      display: flex; gap: 16px; padding: 10px 14px; background: #161b22;
+      border-bottom: 1px solid #30363d; font-size: 12px; color: #8b949e; flex-wrap: wrap;
+    }
+    .summary-bar .count { font-weight: 600; }
+    .summary-bar .modified { color: #f0883e; }
+    .summary-bar .added { color: #7ee787; }
+    .summary-bar .deleted { color: #ff7b72; }
+    .col-header { display: flex; background: #1a1f27; border-bottom: 1px solid #21262d; position: sticky; top: 0; z-index: 1; }
+    .col-header .cell {
+      min-width: 100px; padding: 6px 10px; font-size: 11px; font-weight: 600; color: #8b949e;
+      border-right: 1px solid #21262d; text-align: center; user-select: none;
+    }
+    .row-num { min-width: 50px; max-width: 50px; flex: 0 0 50px; }
+    .spreadsheet-body { max-height: 500px; overflow: auto; }
+    .s-row { display: flex; border-bottom: 1px solid #21262d; }
+    .s-row .cell {
+      min-width: 100px; max-width: 200px; padding: 5px 10px; font-size: 12px;
+      border-right: 1px solid #21262d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .s-row .cell.row-num { background: #0d1117; color: #484f58; text-align: right; font-size: 11px; flex: 0 0 50px; }
+    .s-row .cell.modified-old { background: #2d1418; color: #ff7b72; text-decoration: line-through; }
+    .s-row .cell.modified-new { background: #0f2a1d; color: #7ee787; }
+    .s-row:hover { background: rgba(247,129,102,.04); }
+    .s-row.row-added .cell { background: #0f2a1d; color: #7ee787; }
+    .s-row.row-deleted .cell { background: #2d1418; color: #ff7b72; }
+
+    /* Result toolbar */
+    .result-toolbar {
+      display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;
+    }
+    .result-toolbar .pager { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 12px; color: #8b949e; }
+    .result-toolbar .pager button { padding: 5px 12px; font-size: 12px; }
+
+    /* Empty / status messages */
+    .empty-state { padding: 40px; text-align: center; color: #8b949e; font-size: 14px; }
+
+    .status-pill {
+      display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .04em;
+    }
+    .status-pill.completed { background: #0f2a1d; color: #7ee787; }
+    .status-pill.failed { background: #2d1418; color: #ff7b72; }
+    .status-pill.cancelled { background: #3d2b0f; color: #e3b341; }
+    .status-pill.queued, .status-pill.parsing, .status-pill.comparing { background: #21262d; color: #8b949e; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Diff Checker</h1>
+    <nav>
+      <a href="#" class="active" onclick="switchTab('text',this)">Text</a>
+      <a href="#" onclick="switchTab('excel',this)">Excel</a>
+    </nav>
+    <span class="stats" id="topstats"></span>
+  </header>
+  <main>
+    <!-- TEXT TAB -->
+    <div id="textTab">
+      <div class="row">
+        <div class="col">
+          <label for="orig">Original Text</label>
+          <textarea id="orig" placeholder="Paste original text here..."></textarea>
+        </div>
+        <div class="col">
+          <label for="changed">Changed Text</label>
+          <textarea id="changed" placeholder="Paste changed text here..."></textarea>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button onclick="runDiff()">Find Difference</button>
+        <button class="secondary" onclick="swap()">Swap</button>
+        <button class="secondary" onclick="clearAll()">Clear</button>
+        <span class="stats" id="stats"></span>
+      </div>
+      <div id="result">
+        <div class="diff-grid">
+          <div class="side-head"><span>Original</span><span id="origCount"></span></div>
+          <div class="side-head"><span>Changed</span><span id="changedCount"></span></div>
+          <div class="side" id="origView"></div>
+          <div class="side" id="changedView"></div>
+        </div>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <!-- EXCEL TAB -->
+    <div id="excelTab" class="hidden">
+      <div class="row">
+        <div class="col">
+          <label>Original File</label>
+          <div class="upload-zone" id="dropOrig"
+               ondragover="event.preventDefault();this.classList.add('dragover')"
+               ondragleave="this.classList.remove('dragover')"
+               ondrop="event.preventDefault();this.classList.remove('dragover');handleFile(event.dataTransfer.files[0],'orig')"
+               onclick="document.getElementById('fileOrig').click()">
+            <input type="file" id="fileOrig" accept=".xlsx,.xlsm,.csv,.tsv,.txt"
+                   onchange="handleFile(this.files[0],'orig')">
+            <div class="icon">&#128202;</div>
+            <p>Drop file here</p>
+            <p class="formats">csv, tsv, txt, xlsx, xlsm</p>
+          </div>
+          <div class="file-info hidden" id="origFileInfo">
+            <span class="name" id="origFileName"></span>
+            <span class="size" id="origFileSize"></span>
+            <button class="remove" onclick="clearFile('orig')">&times;</button>
+          </div>
+          <div class="sheet-select hidden" id="origSheetSel">
+            <label>Sheet:</label>
+            <select id="origSheet" onchange="onSheetChange()"></select>
+          </div>
+        </div>
+        <div class="col">
+          <label>Changed File</label>
+          <div class="upload-zone" id="dropChanged"
+               ondragover="event.preventDefault();this.classList.add('dragover')"
+               ondragleave="this.classList.remove('dragover')"
+               ondrop="event.preventDefault();this.classList.remove('dragover');handleFile(event.dataTransfer.files[0],'changed')"
+               onclick="document.getElementById('fileChanged').click()">
+            <input type="file" id="fileChanged" accept=".xlsx,.xlsm,.csv,.tsv,.txt"
+                   onchange="handleFile(this.files[0],'changed')">
+            <div class="icon">&#128202;</div>
+            <p>Drop file here</p>
+            <p class="formats">csv, tsv, txt, xlsx, xlsm</p>
+          </div>
+          <div class="file-info hidden" id="changedFileInfo">
+            <span class="name" id="changedFileName"></span>
+            <span class="size" id="changedFileSize"></span>
+            <button class="remove" onclick="clearFile('changed')">&times;</button>
+          </div>
+          <div class="sheet-select hidden" id="changedSheetSel">
+            <label>Sheet:</label>
+            <select id="changedSheet" onchange="onSheetChange()"></select>
+          </div>
+        </div>
+      </div>
+      <div class="toolbar">
+        <label style="margin:0;">Options</label>
+        <label style="margin:0;text-transform:none;"><input type="checkbox" id="optIgnoreWS"> Ignore white space</label>
+        <label style="margin:0;text-transform:none;"><input type="checkbox" id="optIgnoreCase"> Ignore case</label>
+        <button onclick="runExcelDiff()" id="compareBtn">Compare</button>
+        <button class="secondary" onclick="clearExcel()">Clear</button>
+      </div>
+      <div id="progressArea" class="hidden">
+        <div class="progress-box">
+          <div class="progress-label" id="progressLabel">Parsing...</div>
+          <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-meta">
+            <span class="status-pill" id="progressStatus">queued</span>
+            <button class="secondary" onclick="cancelJob()">Cancel</button>
+          </div>
+        </div>
+      </div>
+      <div id="excelResult"></div>
+    </div>
+  </main>
+
+  <script>
+    // --- TAB ---
+    function switchTab(tab, el) {
+      document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+      el.classList.add('active');
+      document.getElementById('textTab').classList.toggle('hidden', tab !== 'text');
+      document.getElementById('excelTab').classList.toggle('hidden', tab !== 'excel');
+      document.getElementById('topstats').textContent = '';
+    }
+
+    // --- TEXT DIFF ---
+    async function runDiff() {
+      const original = document.getElementById('orig').value;
+      const changed = document.getElementById('changed').value;
+      const res = await fetch('/api/diff', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ original, changed })
+      });
+      const data = await res.json();
+      render(data.ops, original, changed);
+    }
+
+    function render(ops, original, changed) {
+      const origView = document.getElementById('origView');
+      const changedView = document.getElementById('changedView');
+      origView.innerHTML = ''; changedView.innerHTML = '';
+      let oi = 0, ci = 0;
+      for (const op of ops) {
+        if (op.type === 'equal') {
+          origView.appendChild(line('equal', ++oi, null, op.text));
+          changedView.appendChild(line('equal', null, ++ci, op.text));
+        } else if (op.type === 'delete') {
+          origView.appendChild(line('del', ++oi, null, op.text));
+          changedView.appendChild(line('empty', null, null, ''));
+        } else {
+          origView.appendChild(line('empty', null, null, ''));
+          changedView.appendChild(line('add', null, ++ci, op.text));
+        }
+      }
+      document.getElementById('result').classList.add('show');
+      document.getElementById('origCount').textContent = oi + ' lines';
+      document.getElementById('changedCount').textContent = ci + ' lines';
+      const adds = ops.filter(o => o.type === 'insert').length;
+      const dels = ops.filter(o => o.type === 'delete').length;
+      const st = document.getElementById('status');
+      st.innerHTML = adds === 0 && dels === 0
+        ? '<span class="match">Files are identical</span>'
+        : `<span class="differ">${dels} deletions, ${adds} insertions</span>`;
+      document.getElementById('topstats').textContent = `${original.split('\n').length} lines vs ${changed.split('\n').length} lines`;
+    }
+
+    function line(type, oi, ci, text) {
+      const div = document.createElement('div');
+      div.className = 'line ' + type;
+      const ln = document.createElement('span');
+      ln.className = 'ln'; ln.textContent = oi || ci || '';
+      const content = document.createElement('span');
+      content.className = 'content'; content.textContent = text;
+      div.appendChild(ln); div.appendChild(content);
+      return div;
+    }
+
+    function swap() {
+      const a = document.getElementById('orig'), b = document.getElementById('changed');
+      const t = a.value; a.value = b.value; b.value = t; runDiff();
+    }
+    function clearAll() {
+      document.getElementById('orig').value = '';
+      document.getElementById('changed').value = '';
+      document.getElementById('result').classList.remove('show');
+      document.getElementById('status').textContent = '';
+      document.getElementById('topstats').textContent = '';
+    }
+
+    // --- EXCEL ---
+    const state = { origPath: null, changedPath: null, origSheet: '', changedSheet: '' };
+    let currentJob = null;
+    let pollTimer = null;
+    let page = 1;
+    let jobInfo = { summary: {} };
+    const pageSize = 100;
+
+    async function handleFile(file, side) {
+      if (!file) return;
+      const form = new FormData();
+      form.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: form });
+      if (!res.ok) {
+        const txt = await res.text();
+        alert('Upload failed: ' + txt); return;
+      }
+      const data = await res.json();
+      state[side + 'Path'] = data.path;
+      document.getElementById(side + 'FileName').textContent = data.name;
+      document.getElementById(side + 'FileSize').textContent = formatSize(data.size);
+      document.getElementById(side + 'FileInfo').classList.remove('hidden');
+      document.getElementById('drop' + cap(side)).classList.add('hidden');
+      // Load sheets
+      const sr = await fetch('/api/sheets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: data.path })
+      });
+      const sheets = await sr.json();
+      const sel = document.getElementById(side + 'Sheet');
+      sel.innerHTML = '';
+      sheets.sheets.forEach(s => { const o = document.createElement('option'); o.value = s; o.textContent = s; sel.appendChild(o); });
+      document.getElementById(side + 'SheetSel').classList.remove('hidden');
+    }
+
+    function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+    function formatSize(b) { return b > 1048576 ? (b/1048576).toFixed(1)+' MB' : (b/1024).toFixed(1)+' KB'; }
+
+    function clearFile(side) {
+      state[side + 'Path'] = null;
+      document.getElementById(side + 'FileInfo').classList.add('hidden');
+      document.getElementById(side + 'SheetSel').classList.add('hidden');
+      document.getElementById('drop' + cap(side)).classList.remove('hidden');
+      document.getElementById('file' + cap(side)).value = '';
+      if (currentJob) { fetch('/api/jobs/' + currentJob + '/cancel', { method: 'POST' }); }
+      document.getElementById('excelResult').innerHTML = '';
+      document.getElementById('progressArea').classList.add('hidden');
+      if (pollTimer) clearInterval(pollTimer);
+    }
+    function clearExcel() { clearFile('orig'); clearFile('changed'); }
+    function onSheetChange() {
+      state.origSheet = document.getElementById('origSheet').value;
+      state.changedSheet = document.getElementById('changedSheet').value;
+    }
+
+    async function runExcelDiff() {
+      if (!state.origPath || !state.changedPath) { alert('Upload both files'); return; }
+      const body = {
+        originalPath: state.origPath,
+        changedPath: state.changedPath,
+        sheetName: state.origSheet || '',
+        options: {
+          mode: 'rows',
+          originalSheet: state.origSheet || '',
+          changedSheet: state.changedSheet || '',
+          ignoreWhitespace: document.getElementById('optIgnoreWS').checked,
+          ignoreCase: document.getElementById('optIgnoreCase').checked
+        }
+      };
+      document.getElementById('progressArea').classList.remove('hidden');
+      document.getElementById('progressFill').style.width = '0%';
+      document.getElementById('progressLabel').textContent = 'Queued...';
+      document.getElementById('progressStatus').textContent = 'queued';
+      document.getElementById('progressStatus').className = 'status-pill queued';
+      document.getElementById('compareBtn').disabled = true;
+      document.getElementById('excelResult').innerHTML = '';
+
+      const res = await fetch('/api/jobs', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      currentJob = data.jobId;
+      startPolling();
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(pollJob, 800);
+      pollJob();
+    }
+
+    async function pollJob() {
+      if (!currentJob) return;
+      const res = await fetch('/api/jobs/' + currentJob + '/status');
+      const j = await res.json();
+      jobInfo = j;
+      updateProgress(j);
+      if (j.status === 'completed') {
+        clearInterval(pollTimer); pollTimer = null;
+        document.getElementById('compareBtn').disabled = false;
+        page = 1;
+        loadRows();
+      } else if (j.status === 'failed' || j.status === 'cancelled') {
+        clearInterval(pollTimer); pollTimer = null;
+        document.getElementById('compareBtn').disabled = false;
+        document.getElementById('excelResult').innerHTML =
+          `<div class="empty-state">${j.status === 'failed' ? 'Error: ' + j.error : 'Cancelled.'}</div>`;
+      }
+    }
+
+    function updateProgress(j) {
+      const label = document.getElementById('progressLabel');
+      const fill = document.getElementById('progressFill');
+      const pill = document.getElementById('progressStatus');
+      const statusText = j.status;
+      pill.textContent = statusText;
+      pill.className = 'status-pill ' + statusText;
+      if (j.progressLabel) label.textContent = j.progressLabel;
+      if (j.progress) fill.style.width = Math.round(j.progress * 100) + '%';
+    }
+
+    function cancelJob() {
+      if (!currentJob) return;
+      fetch('/api/jobs/' + currentJob + '/cancel', { method: 'POST' });
+    }
+
+    async function loadRows() {
+      if (!currentJob) return;
+      const filter = document.getElementById('filterSel').value || 'all';
+      const res = await fetch(`/api/jobs/${currentJob}/rows?filter=${filter}&page=${page}&pageSize=${pageSize}`);
+      const data = await res.json();
+      renderRows(data);
+    }
+
+    function renderRows(data) {
+      const container = document.getElementById('excelResult');
+      const rows = data.rows || [];
+      const total = data.totalRows || 0;
+
+      let html = `
+        <div class="result-toolbar">
+          <select id="filterSel" onchange="page=1;loadRows()">
+            <option value="all" ${data.filter==='all'?'selected':''}>All rows</option>
+            <option value="matches" ${data.filter==='matches'?'selected':''}>Matches only</option>
+            <option value="nonmatches" ${data.filter==='nonmatches'?'selected':''}>Non-matches</option>
+            <option value="modified" ${data.filter==='modified'?'selected':''}>Modified</option>
+            <option value="added" ${data.filter==='added'?'selected':''}>Added</option>
+            <option value="deleted" ${data.filter==='deleted'?'selected':''}>Deleted</option>
+          </select>
+          <button class="secondary" onclick="exportCsv()">Export CSV</button>
+          <button class="secondary" onclick="exportJsonl()">Export JSONL</button>
+          <span class="stats">Showing ${(page-1)*pageSize+1}–${Math.min(page*pageSize,total)} of ${total.toLocaleString()}</span>
+          <div class="pager">
+            <button class="secondary" onclick="page--;loadRows()" ${page<=1?'disabled':''}>&larr;</button>
+            <span>Page ${data.page}</span>
+            <button class="secondary" onclick="page++;loadRows()" ${page*pageSize>=total?'disabled':''}>&rarr;</button>
+          </div>
+        </div>
+        <div class="spreadsheet-wrap">
+          <div class="summary-bar">
+            <span><span class="count modified">${jobInfo.summary.modifiedRows||0}</span> Modified</span>
+            <span><span class="count added">${jobInfo.summary.addedRows||0}</span> Added</span>
+            <span><span class="count deleted">${jobInfo.summary.deletedRows||0}</span> Deleted</span>
+            <span><span class="count">${jobInfo.summary.matchedRows||0}</span> Matched</span>
+          </div>
+          <div class="spreadsheet-body">`;
+
+      if (rows.length === 0) {
+        html += `<div class="empty-state">No rows match this filter.</div>`;
+      } else {
+        rows.forEach(r => {
+          const rowClass = r.status === 'added' ? 'row-added' : r.status === 'deleted' ? 'row-deleted' : '';
+          const statusLabel = `<span class="status-pill ${r.status}">${r.status}</span>`;
+          html += `<div class="s-row ${rowClass}">
+            <div class="cell row-num">${r.rowNumber} ${statusLabel}</div>`;
+          if (r.changes && r.changes.length > 0) {
+            r.changes.forEach(c => {
+              if (c.type === 'added' || c.type === 'deleted') {
+                html += `<div class="cell">${esc(c.ref)}</div>`;
+              } else {
+                html += `<div class="cell" style="min-width:200px;">
+                  <span class="modified-old">${esc(c.old)}</span> &rarr; <span class="modified-new">${esc(c.new)}</span>
+                  <span style="color:#484f58;font-size:10px;"> [${esc(c.ref)}]</span>
+                </div>`;
+              }
+            });
+          } else {
+            html += `<div class="cell">(identical)</div>`;
+          }
+          html += `</div>`;
+        });
+      }
+
+      html += `</div></div>`;
+      container.innerHTML = html;
+    }
+
+    async function exportCsv() {      if (!currentJob) return;
+      const filter = document.getElementById('filterSel').value;
+      const res = await fetch(`/api/jobs/${currentJob}/export`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filter, format: 'csv' })
+      });
+      downloadBlob(await res.blob(), `diff-${filter}.csv`);
+    }
+
+    async function exportJsonl() {
+      if (!currentJob) return;
+      const filter = document.getElementById('filterSel').value;
+      const res = await fetch(`/api/jobs/${currentJob}/export`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filter, format: 'jsonl' })
+      });
+      downloadBlob(await res.blob(), `diff-${filter}.jsonl`);
+    }
+
+    function downloadBlob(blob, name) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name;
+      document.body.appendChild(a); a.click();
+      a.remove(); URL.revokeObjectURL(url);
+    }
+
+    function esc(s) {
+      if (s === undefined || s === null) return '';
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>
