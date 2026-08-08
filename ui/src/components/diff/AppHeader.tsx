@@ -8,8 +8,9 @@ import {
   DrawerTitle,
   DrawerClose,
 } from "@/components/ui/drawer";
-import { Menu, BookOpen } from "lucide-react";
+import { Menu, BookOpen, Sun, Moon, Power, RotateCcw } from "lucide-react";
 import { DocsDrawer } from "./DocsDrawer";
+import { shutdownServer, restartServer } from "@/api";
 
 export type Step = "upload" | "configure" | "results";
 
@@ -23,14 +24,31 @@ export function AppHeader({
   step,
   onStep,
   reached,
+  theme,
+  onToggleTheme,
 }: {
   step: Step;
   onStep: (s: Step) => void;
   reached: Record<Step, boolean>;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }) {
   const isDesktop = useIsDesktop();
   const [menuOpen, setMenuOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
+  const [serverBusy, setServerBusy] = useState(false);
+
+  async function handleShutdown() {
+    if (serverBusy || !confirm("Shut down the server?")) return;
+    setServerBusy(true);
+    try { await shutdownServer(); } catch { /* best-effort */ }
+  }
+
+  async function handleRestart() {
+    if (serverBusy || !confirm("Restart the server?")) return;
+    setServerBusy(true);
+    try { await restartServer(); } catch { /* best-effort */ }
+  }
 
   function handleNav(s: Step) {
     if (!reached[s]) return;
@@ -73,16 +91,43 @@ export function AppHeader({
             ))}
           </nav>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
+          <button
+            type="button"
+            onClick={handleRestart}
+            disabled={serverBusy}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-40"
+            title="Restart server"
+          >
+            <RotateCcw className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleShutdown}
+            disabled={serverBusy}
+            className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+            title="Shut down server"
+          >
+            <Power className="size-4" />
+          </button>
+          <div className="h-4 w-px bg-hairline mx-1" />
           <button
             type="button"
             onClick={() => setDocsOpen(true)}
             className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             <BookOpen className="size-3.5" />
-            Documentation
+            Docs
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-2">
             <span className="hidden text-xs font-medium text-muted-foreground md:block">
               Hareesh D
             </span>
@@ -109,6 +154,14 @@ export function AppHeader({
           <span className="text-[15px] font-bold tracking-[-0.03em]">Differ <span className="text-primary">Pro</span></span>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={onToggleTheme}
+            className="grid size-8 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+          </button>
           <span className="mr-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
             {STEPS.find((s) => s.id === step)?.label}
           </span>
@@ -161,14 +214,29 @@ export function AppHeader({
           <div className="border-t border-hairline px-4 py-2">
             <button
               type="button"
-              onClick={() => {
-                setMenuOpen(false);
-                setDocsOpen(true);
-              }}
+              onClick={() => { setMenuOpen(false); setDocsOpen(true); }}
               className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             >
               <BookOpen className="size-4" />
               Documentation
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); handleRestart(); }}
+              disabled={serverBusy}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors text-muted-foreground hover:bg-accent/50 hover:text-foreground disabled:opacity-40"
+            >
+              <RotateCcw className="size-4" />
+              Restart Server
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMenuOpen(false); handleShutdown(); }}
+              disabled={serverBusy}
+              className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left transition-colors text-destructive hover:bg-destructive/10 disabled:opacity-40"
+            >
+              <Power className="size-4" />
+              Shut Down Server
             </button>
           </div>
         </DrawerContent>

@@ -10,9 +10,9 @@ import {
 import type { Change, ResultRow } from "@/api";
 
 const kindColor = {
-  modified: "text-diff-mod",
-  added: "text-diff-add",
-  deleted: "text-diff-del",
+  modified: "text-neon-yellow",
+  added: "text-neon-green",
+  deleted: "text-neon-red",
 } as const;
 
 export function ToolsDrawer({
@@ -82,9 +82,9 @@ export function ToolsDrawer({
                     type="button"
                     onClick={() => onFilterChange(opt.value)}
                     className={cn(
-                      "rounded-md border px-3 py-2 text-xs font-medium transition-colors",
+                      "rounded border px-3 py-2 text-xs font-medium transition-colors",
                       filter === opt.value
-                        ? "border-foreground bg-accent text-foreground"
+                        ? "border-foreground bg-foreground text-background"
                         : "border-border text-muted-foreground hover:border-muted-foreground",
                     )}
                   >
@@ -117,14 +117,14 @@ export function ToolsDrawer({
               <button
                 type="button"
                 onClick={() => onExport("jsonl")}
-                className="w-full rounded-md bg-primary px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm"
+                className="w-full rounded bg-foreground px-3 py-2.5 text-xs font-semibold text-background"
               >
                 Export JSONL
               </button>
               <button
                 type="button"
                 onClick={() => onExport("csv")}
-                className="w-full rounded-md border border-border bg-surface px-3 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                className="w-full rounded border border-border bg-background px-3 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground"
               >
                 Export CSV
               </button>
@@ -200,7 +200,7 @@ export function ToolsDrawer({
           <DrawerClose asChild>
             <button
               type="button"
-              className="w-full rounded-md border border-border bg-surface px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+              className="w-full rounded border border-border bg-background px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground"
             >
               Close
             </button>

@@ -11,16 +11,16 @@ import { ToolsDrawer } from "./ToolsDrawer";
 import { SlidersHorizontal } from "lucide-react";
 
 const kindColor = {
-  modified: "text-diff-mod",
-  added: "text-diff-add",
-  deleted: "text-diff-del",
+  modified: "text-neon-yellow",
+  added: "text-neon-green",
+  deleted: "text-neon-red",
 } as const;
 
 const rowTone = {
-  equal: "hover:bg-accent/40",
-  modified: "bg-diff-mod/8 hover:bg-diff-mod/15",
-  added: "bg-diff-add/8 hover:bg-diff-add/15",
-  deleted: "bg-diff-del/8 hover:bg-diff-del/15",
+  equal: "hover:bg-card/40",
+  modified: "bg-neon-yellow/5 hover:bg-neon-yellow/10",
+  added: "bg-neon-green/5 hover:bg-neon-green/10",
+  deleted: "bg-neon-red/5 hover:bg-neon-red/10",
 } as const;
 
 function colLetter(n: number) {
@@ -44,7 +44,7 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
-  const pageSize = 100;
+  const [pageSize, setPageSize] = useState(50);
 
   const [view, setView] = useState<"redline" | "original" | "changed">("redline");
   const [changesOnly, setChangesOnly] = useState(false);
@@ -62,9 +62,9 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
     if (row) row.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
   }, [active, page]);
 
-  const loadRows = useCallback(async (job: string, pageNum: number, flt: string) => {
+  const loadRows = useCallback(async (job: string, pageNum: number, flt: string, ps: number) => {
     try {
-      const data: RowsResponse = await getJobRows(job, { filter: flt, page: pageNum, pageSize });
+      const data: RowsResponse = await getJobRows(job, { filter: flt, page: pageNum, pageSize: ps });
       setRows(data.rows || []);
       setTotalRows(data.totalRows || 0);
     } catch (e) {
@@ -104,7 +104,7 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
             if (j.status === "completed") {
               clearInterval(timer);
               setPage(1);
-              loadRows(created.jobId, 1, "all");
+              loadRows(created.jobId, 1, "all", pageSize);
             } else if (j.status === "failed" || j.status === "cancelled") {
               clearInterval(timer);
             }
@@ -118,9 +118,9 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
 
   useEffect(() => {
     if (jobId && status?.status === "completed") {
-      loadRows(jobId, page, filter);
+      loadRows(jobId, page, filter, pageSize);
     }
-  }, [jobId, page, filter]);
+  }, [jobId, page, filter, pageSize]);
 
   const done = status?.status === "completed";
   const running = status?.status === "queued" || status?.status === "parsing" || status?.status === "comparing";
@@ -165,7 +165,7 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Mobile toolbar */}
-        <div className="flex shrink-0 flex-col gap-2 border-b border-hairline bg-surface p-3">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-hairline bg-card p-3">
           <div className="flex items-center justify-between">
             <button type="button" onClick={onBack}
               className="rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground">
@@ -175,39 +175,39 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
               {["card", "table"].map((m) => (
                 <button key={m} type="button" onClick={() => setMobileViewMode(m as "card" | "table")}
                   className={cn("rounded px-2 py-1 text-[10px] font-medium capitalize transition-colors",
-                    mobileViewMode === m ? "bg-accent text-foreground" : "text-muted-foreground")}>
+                    mobileViewMode === m ? "bg-foreground text-background" : "text-muted-foreground")}>
                   {m}
                 </button>
               ))}
             </div>
             <button type="button" onClick={() => setDrawerOpen(true)}
-              className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground">
+              className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-card hover:text-foreground">
               <SlidersHorizontal className="size-3.5" />
             </button>
           </div>
 
           <div className="flex items-center gap-1.5 overflow-x-auto">
-            <div className="flex shrink-0 rounded-md bg-accent p-0.5">
+            <div className="flex shrink-0 rounded border border-border bg-background p-0.5">
               {(["redline", "original", "changed"] as const).map((v) => (
                 <button key={v} type="button" onClick={() => setView(v)}
                   className={cn("rounded px-2 py-0.5 text-[10px] capitalize transition-colors",
-                    view === v ? "bg-surface font-medium shadow-sm ring-1 ring-hairline" : "text-muted-foreground")}>
+                    view === v ? "bg-foreground text-background font-medium" : "text-muted-foreground")}>
                   {v}
                 </button>
               ))}
             </div>
             <div className="h-3 w-px shrink-0 bg-hairline" />
-            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{setup.fileA.name}</span>
+            <span className="shrink-0 rounded bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{setup.fileA.name}</span>
             <span className="shrink-0 text-[10px] text-muted-foreground">vs</span>
-            <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{setup.fileB.name}</span>
+            <span className="shrink-0 rounded bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{setup.fileB.name}</span>
           </div>
 
           {done && (
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
               {[
-                { c: "bg-diff-mod", n: summary.modifiedRows ?? 0, l: "Mod" },
-                { c: "bg-diff-add", n: summary.addedRows ?? 0, l: "Add" },
-                { c: "bg-diff-del", n: summary.deletedRows ?? 0, l: "Del" },
+                { c: "bg-neon-yellow", n: summary.modifiedRows ?? 0, l: "Mod" },
+                { c: "bg-neon-green", n: summary.addedRows ?? 0, l: "Add" },
+                { c: "bg-neon-red", n: summary.deletedRows ?? 0, l: "Del" },
               ].map((s) => (
                 <span key={s.l} className="flex items-center gap-1">
                   <span className={cn("size-1.5 rounded-full", s.c)} />
@@ -219,48 +219,48 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
         </div>
 
         {error && (
-          <div className="border-b border-hairline bg-diff-del/8 px-4 py-2 text-xs text-foreground">{error}</div>
+          <div className="border-b border-hairline bg-neon-red/5 px-4 py-2 text-xs text-foreground">{error}</div>
         )}
 
         {!done ? (
-          <div className="flex flex-1 items-center justify-center bg-grid p-4">
-            <div className="w-full max-w-sm rounded-md border border-border bg-surface p-4 text-center">
+          <div className="flex flex-1 items-center justify-center bg-background p-4">
+            <div className="w-full max-w-sm rounded-md border border-border bg-card p-4 text-center">
               <p className="mb-2 text-sm font-semibold">
                 {status?.status === "failed" ? "Comparison failed" : status?.status === "cancelled" ? "Comparison cancelled" : "Comparing files..."}
               </p>
               {running && (
                 <>
                   <p className="mb-3 text-xs text-muted-foreground">{status?.progressLabel ?? "Working..."}</p>
-                  <div className="h-2 w-full overflow-hidden rounded bg-accent">
-                    <div className="h-full bg-primary transition-all" style={{ width: `${Math.round((status?.progress ?? 0) * 100)}%` }} />
+                  <div className="h-2 w-full overflow-hidden rounded bg-border">
+                    <div className="h-full bg-foreground transition-all" style={{ width: `${Math.round((status?.progress ?? 0) * 100)}%` }} />
                   </div>
                 </>
               )}
-              {status?.status === "failed" && <p className="mt-2 text-xs text-diff-del">{status.error || "Unknown error"}</p>}
+              {status?.status === "failed" && <p className="mt-2 text-xs text-neon-red">{status.error || "Unknown error"}</p>}
               {(status?.status === "failed" || status?.status === "cancelled") && (
                 <button type="button" onClick={onBack}
-                  className="mt-3 w-full rounded bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm">
+                  className="mt-3 w-full rounded bg-foreground px-3 py-2 text-xs font-semibold text-background">
                   Back to review
                 </button>
               )}
             </div>
           </div>
         ) : mobileViewMode === "card" ? (
-          <div className="flex-1 overflow-auto bg-grid">
+          <div className="flex-1 overflow-auto bg-background">
             <ResultsCard rows={displayRows} view={view} active={active} onActive={setActive} />
           </div>
         ) : (
-          <div className="flex-1 overflow-auto bg-grid">
+          <div className="flex-1 overflow-auto bg-background">
             <div className="overflow-x-auto">
-              <table className="w-full border-separate border-spacing-0 font-mono text-[11px] leading-none">
+              <table className="min-w-full border-separate border-spacing-0 font-mono text-[11px] leading-none">
                 <thead className="sticky top-0 z-20">
                   <tr>
-                    <th className="w-16 border-r border-b border-hairline bg-grid-header px-1 py-1.5 text-center text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Row</th>
+                    <th className="w-16 border-r border-b border-hairline bg-secondary px-1 py-1.5 text-center text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Row</th>
                     {columns.length === 0 && (
-                      <th className="border-b border-hairline bg-grid-header px-2 py-1.5 text-left text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Cells</th>
+                      <th className="border-b border-hairline bg-secondary px-2 py-1.5 text-left text-[9px] font-medium uppercase tracking-wider text-muted-foreground">Cells</th>
                     )}
                     {columns.map((c) => (
-                      <th key={c} className="border-r border-b border-hairline bg-grid-header px-2 py-1.5 text-left text-[9px] font-medium uppercase tracking-wider text-muted-foreground">{c}</th>
+                      <th key={c} className="border-r border-b border-hairline bg-secondary px-2 py-1.5 text-left text-[9px] font-medium uppercase tracking-wider text-muted-foreground">{c}</th>
                     ))}
                   </tr>
                 </thead>
@@ -277,13 +277,13 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                         if (node) rowRefs.current.set(rowKey, node);
                         else rowRefs.current.delete(rowKey);
                       }} onClick={() => setActive(rowKey)}
-                        className={cn("cursor-pointer transition-colors", rowTone[row.status as keyof typeof rowTone] ?? "hover:bg-accent/40", active === rowKey && "ring-1 ring-inset ring-ring")}>
-                        <td className="sticky left-0 z-10 border-r border-b border-hairline bg-grid-header px-1 py-1.5 text-center text-[9px] text-muted-foreground">
+                        className={cn("cursor-pointer transition-colors", rowTone[row.status as keyof typeof rowTone] ?? "hover:bg-card/40", active === rowKey && "ring-1 ring-inset ring-ring")}>
+                        <td className="sticky left-0 z-10 border-r border-b border-hairline bg-secondary px-1 py-1.5 text-center text-[9px] text-muted-foreground">
                           {row.rowNumber}
                           <span className={cn("ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle",
-                            row.status === "modified" && "bg-diff-mod",
-                            row.status === "added" && "bg-diff-add",
-                            row.status === "deleted" && "bg-diff-del")} />
+                            row.status === "modified" && "bg-neon-yellow",
+                            row.status === "added" && "bg-neon-green",
+                            row.status === "deleted" && "bg-neon-red")} />
                         </td>
                         {columns.length === 0 && (
                           <td className="border-b border-hairline px-2 py-1.5 font-sans text-[10px] text-muted-foreground">
@@ -303,14 +303,14 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                           const hasChange = !!change && !(change.old === "" && change.new === "");
                           return (
                             <td key={c} className={cn("border-r border-b border-hairline px-2 py-1.5",
-                              hasChange && view === "redline" && "bg-diff-mod/10",
-                              hasChange && view === "original" && "bg-diff-del/10",
-                              hasChange && view === "changed" && "bg-diff-add/10")}>
+                              hasChange && view === "redline" && "bg-neon-yellow/10",
+                              hasChange && view === "original" && "bg-neon-red/10",
+                              hasChange && view === "changed" && "bg-neon-green/10")}>
                               {hasChange ? (
                                 <span className={cn("rounded px-0.5",
-                                  change!.type === "modified" && "bg-diff-mod/20 text-diff-mod",
-                                  change!.type === "added" && "bg-diff-add/20 text-diff-add",
-                                  change!.type === "deleted" && "bg-diff-del/20 text-diff-del",
+                                  change!.type === "modified" && "bg-neon-yellow/20 text-neon-yellow",
+                                  change!.type === "added" && "bg-neon-green/20 text-neon-green",
+                                  change!.type === "deleted" && "bg-neon-red/20 text-neon-red",
                                   view === "redline" && "font-semibold",
                                   view === "original" && "text-muted-foreground",
                                   kindColor[change!.type as keyof typeof kindColor] ?? "")}> 
@@ -339,7 +339,7 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
 
         {/* Mobile pagination footer */}
         {done && (
-          <div className="flex shrink-0 items-center justify-between border-t border-hairline bg-surface px-3 py-2">
+          <div className="flex shrink-0 items-center justify-between border-t border-hairline bg-card px-3 py-2">
             <span className="text-[10px] text-muted-foreground">{totalRows.toLocaleString()} rows</span>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -369,7 +369,7 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Tools sidebar */}
-      <aside className="flex w-56 shrink-0 flex-col gap-4 border-r border-hairline bg-surface p-3">
+      <aside className="flex w-56 shrink-0 flex-col gap-4 border-r border-hairline bg-card p-3">
         {!done && (
           <div>
             <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
@@ -377,8 +377,8 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
               {running ? (
                 <>
                   <p className="text-muted-foreground">{status?.progressLabel ?? status?.status}</p>
-                  <div className="h-1.5 w-full overflow-hidden rounded bg-accent">
-                    <div className="h-full bg-primary transition-all" style={{ width: `${Math.round((status?.progress ?? 0) * 100)}%` }} />
+                  <div className="h-1.5 w-full overflow-hidden rounded bg-border">
+                    <div className="h-full bg-foreground transition-all" style={{ width: `${Math.round((status?.progress ?? 0) * 100)}%` }} />
                   </div>
                   <button type="button" onClick={handleCancel}
                     className="mt-1 rounded border border-border px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground">
@@ -386,16 +386,16 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                   </button>
                 </>
               ) : status?.status === "failed" ? (
-                <p className="text-diff-del">{status.error || "Failed"}</p>
+                <p className="text-neon-red">{status.error || "Failed"}</p>
               ) : status?.status === "cancelled" ? (
-                <p className="text-diff-mod">Cancelled</p>
+                <p className="text-neon-yellow">Cancelled</p>
               ) : (
                 <p className="text-muted-foreground">Waiting...</p>
               )}
             </div>
             {(status?.status === "failed" || status?.status === "cancelled") && (
               <button type="button" onClick={onBack}
-                className="mt-2 w-full rounded bg-primary px-2 py-1.5 text-[10px] font-semibold text-primary-foreground shadow-sm">
+                className="mt-2 w-full rounded bg-foreground px-2 py-1.5 text-[10px] font-semibold text-background">
                 Back to review
               </button>
             )}
@@ -412,10 +412,10 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                   { label: "Sort by change type", on: sortByChange, set: setSortByChange },
                 ].map((t) => (
                   <button key={t.label} type="button" onClick={() => t.set(!t.on)}
-                    className="flex w-full items-center justify-between rounded px-1 py-1 hover:bg-accent/50">
+                    className="flex w-full items-center justify-between rounded px-1 py-1 hover:bg-card/50">
                     <span className="text-[11px]">{t.label}</span>
-                    <span className={cn("relative h-4 w-7 rounded-full transition-colors", t.on ? "bg-primary" : "bg-accent")}>
-                      <span className={cn("absolute top-0.5 size-3 rounded-full bg-surface shadow-sm ring-1 ring-hairline transition-all", t.on ? "left-3.5" : "left-0.5")} />
+                    <span className={cn("relative h-4 w-7 rounded-full transition-colors", t.on ? "bg-foreground" : "bg-border")}>
+                      <span className={cn("absolute top-0.5 size-3 rounded-full bg-background transition-all", t.on ? "left-3.5" : "left-0.5")} />
                     </span>
                   </button>
                 ))}
@@ -425,15 +425,15 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
             <div>
               <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Sources</p>
               <div className="space-y-1 font-mono text-[10px] text-muted-foreground">
-                <p className="truncate rounded bg-accent/60 px-1.5 py-1">{setup.fileA.name}</p>
-                <p className="truncate rounded bg-accent/60 px-1.5 py-1">{setup.fileB.name}</p>
+                <p className="truncate rounded bg-card/60 px-1.5 py-1">{setup.fileA.name}</p>
+                <p className="truncate rounded bg-card/60 px-1.5 py-1">{setup.fileB.name}</p>
               </div>
             </div>
 
             <div className="mt-auto space-y-1">
               <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Filter</p>
               <select value={filter} onChange={(e) => { setFilter(e.target.value); setPage(1); }}
-                className="w-full rounded border border-border bg-grid px-2 py-1.5 text-[11px] outline-none focus:ring-1 focus:ring-ring">
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-[11px] outline-none focus:ring-1 focus:ring-ring">
                 <option value="all">All rows</option>
                 <option value="matches">Matches only</option>
                 <option value="nonmatches">Non-matches</option>
@@ -443,11 +443,11 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
               </select>
               <p className="mt-1 mb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Export</p>
               <button onClick={() => handleExport("jsonl")}
-                className="w-full rounded bg-primary px-2 py-1.5 text-[10px] font-semibold text-primary-foreground shadow-sm">
+                className="w-full rounded bg-foreground px-2 py-1.5 text-[10px] font-semibold text-background">
                 Export JSONL
               </button>
               <button onClick={() => handleExport("csv")}
-                className="w-full rounded border border-border bg-surface px-2 py-1.5 text-[10px] font-medium text-muted-foreground hover:text-foreground">
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-[10px] font-medium text-muted-foreground hover:text-foreground">
                 Export CSV
               </button>
             </div>
@@ -456,29 +456,29 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
       </aside>
 
       {/* Workbench */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex h-11 shrink-0 items-center justify-between border-b border-hairline bg-surface px-4">
+      <div className="flex flex-1 flex-col overflow-x-auto overflow-y-hidden">
+        <div className="flex h-11 shrink-0 items-center justify-between border-b border-hairline bg-card px-4">
           <div className="flex items-center gap-2">
-            <div className="flex rounded-md bg-accent p-0.5">
+            <div className="flex rounded border border-border bg-background p-0.5">
               {(["redline", "original", "changed"] as const).map((v) => (
                 <button key={v} type="button" onClick={() => setView(v)}
                   className={cn("rounded px-2.5 py-1 text-xs capitalize transition-colors",
-                    view === v ? "bg-surface font-medium shadow-sm ring-1 ring-hairline" : "text-muted-foreground hover:text-foreground")}>
+                    view === v ? "bg-foreground text-background font-medium" : "text-muted-foreground hover:text-foreground")}>
                   {v}
                 </button>
               ))}
             </div>
             <div className="mx-1 h-4 w-px bg-hairline" />
-            <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{setup.fileA.name}</span>
+            <span className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{setup.fileA.name}</span>
             <span className="text-[10px] text-muted-foreground">vs</span>
-            <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{setup.fileB.name}</span>
+            <span className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">{setup.fileB.name}</span>
           </div>
           {done && (
             <div className="flex items-center gap-2">
               {[
-                { c: "bg-diff-mod", n: summary.modifiedRows ?? 0, l: "Modified" },
-                { c: "bg-diff-add", n: summary.addedRows ?? 0, l: "Added" },
-                { c: "bg-diff-del", n: summary.deletedRows ?? 0, l: "Deleted" },
+                { c: "bg-neon-yellow", n: summary.modifiedRows ?? 0, l: "Modified" },
+                { c: "bg-neon-green", n: summary.addedRows ?? 0, l: "Added" },
+                { c: "bg-neon-red", n: summary.deletedRows ?? 0, l: "Deleted" },
               ].map((s) => (
                 <span key={s.l} className="flex items-center gap-2 px-2 py-1 text-sm text-muted-foreground">
                   <span className={cn("size-1.5 rounded-full", s.c)} />
@@ -490,19 +490,19 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
         </div>
 
         {error && (
-          <div className="border-b border-hairline bg-diff-del/8 px-4 py-2 text-xs text-foreground">{error}</div>
+          <div className="border-b border-hairline bg-neon-red/5 px-4 py-2 text-xs text-foreground">{error}</div>
         )}
 
         {!done ? (
-          <div className="flex flex-1 items-center justify-center bg-grid p-8">
-            <div className="w-full max-w-md rounded-md border border-border bg-surface p-6 text-center">
+          <div className="flex flex-1 items-center justify-center bg-background p-8">
+            <div className="w-full max-w-md rounded-md border border-border bg-card p-6 text-center">
               <p className="mb-2 text-sm font-semibold">
                 {status?.status === "failed" ? "Comparison failed" : status?.status === "cancelled" ? "Comparison cancelled" : "Comparing files..."}
               </p>
               {running && (
                 <>
                   <p className="mb-3 text-xs text-muted-foreground">{status?.progressLabel ?? "Working..."}</p>
-                  <div className="h-2 w-full overflow-hidden rounded bg-accent">
+                  <div className="h-2 w-full overflow-hidden rounded bg-border">
                     <div className="h-full bg-primary transition-all" style={{ width: `${Math.round((status?.progress ?? 0) * 100)}%` }} />
                   </div>
                 </>
@@ -511,16 +511,16 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
             </div>
           </div>
         ) : (
-          <div className="flex-1 overflow-auto bg-grid">
-            <table className="w-full border-separate border-spacing-0 font-mono text-[13px] leading-none">
+          <div className="flex-1 overflow-y-auto bg-background">
+            <table className="min-w-full border-separate border-spacing-0 font-mono text-[13px] leading-none">
               <thead className="sticky top-0 z-20">
                 <tr>
-                  <th className="w-24 border-r border-b border-hairline bg-grid-header py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Row</th>
+                  <th className="w-24 border-r border-b border-hairline bg-secondary py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Row</th>
                   {columns.length === 0 && (
-                    <th className="border-b border-hairline bg-grid-header px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Cells</th>
+                    <th className="border-b border-hairline bg-secondary px-3 py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Cells</th>
                   )}
                   {columns.map((c) => (
-                    <th key={c} className="border-r border-b border-hairline bg-grid-header px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{c}</th>
+                    <th key={c} className="border-r border-b border-hairline bg-secondary px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-muted-foreground">{c}</th>
                   ))}
                 </tr>
               </thead>
@@ -537,13 +537,13 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                       if (node) rowRefs.current.set(rowKey, node);
                       else rowRefs.current.delete(rowKey);
                     }} onClick={() => setActive(rowKey)}
-                      className={cn("cursor-pointer transition-colors", rowTone[row.status as keyof typeof rowTone] ?? "hover:bg-accent/40", active === rowKey && "ring-1 ring-inset ring-ring")}>
-                      <td className="sticky left-0 z-10 border-r border-b border-hairline bg-grid-header px-2 py-2 text-center text-[10px] text-muted-foreground">
+                      className={cn("cursor-pointer transition-colors", rowTone[row.status as keyof typeof rowTone] ?? "hover:bg-card/40", active === rowKey && "ring-1 ring-inset ring-ring")}>
+                      <td className="sticky left-0 z-10 border-r border-b border-hairline bg-secondary px-2 py-2 text-center text-[10px] text-muted-foreground">
                         {row.rowNumber}
                         <span className={cn("ml-2 inline-block h-1.5 w-1.5 rounded-full align-middle",
-                          row.status === "modified" && "bg-diff-mod",
-                          row.status === "added" && "bg-diff-add",
-                          row.status === "deleted" && "bg-diff-del")} />
+                          row.status === "modified" && "bg-neon-yellow",
+                          row.status === "added" && "bg-neon-green",
+                          row.status === "deleted" && "bg-neon-red")} />
                       </td>
                       {columns.length === 0 && (
                         <td className="border-b border-hairline px-3 py-2 font-sans text-[11px] text-muted-foreground">
@@ -563,15 +563,15 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                         const hasChange = !!change && !(change.old === "" && change.new === "");
                         return (
                           <td key={c} className={cn("border-r border-b border-hairline px-3 py-2",
-                            hasChange && view === "redline" && "bg-diff-mod/10",
-                            hasChange && view === "original" && "bg-diff-del/10",
-                            hasChange && view === "changed" && "bg-diff-add/10")}>
+                            hasChange && view === "redline" && "bg-neon-yellow/10",
+                            hasChange && view === "original" && "bg-neon-red/10",
+                            hasChange && view === "changed" && "bg-neon-green/10")}>
                             {hasChange ? (
                               <>
                                 <span className={cn("rounded px-0.5",
-                                  change!.type === "modified" && "bg-diff-mod/20 text-diff-mod",
-                                  change!.type === "added" && "bg-diff-add/20 text-diff-add",
-                                  change!.type === "deleted" && "bg-diff-del/20 text-diff-del",
+                                  change!.type === "modified" && "bg-neon-yellow/20 text-neon-yellow",
+                                  change!.type === "added" && "bg-neon-green/20 text-neon-green",
+                                  change!.type === "deleted" && "bg-neon-red/20 text-neon-red",
                                   view === "redline" && "font-semibold",
                                   view === "original" && "text-muted-foreground",
                                   kindColor[change!.type as keyof typeof kindColor] ?? "")}>
@@ -599,7 +599,7 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
           </div>
         )}
 
-        <footer className="flex h-8 shrink-0 items-center justify-between border-t border-hairline bg-surface px-3">
+        <footer className="flex h-8 shrink-0 items-center justify-between border-t border-hairline bg-card px-3">
           <div className="flex items-center gap-4">
             {done && (
               <>
@@ -607,15 +607,26 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
                   {summary.matchedRows ?? 0} matched - {summary.modifiedRows ?? 0} modified - {summary.addedRows ?? 0} added - {summary.deletedRows ?? 0} deleted
                 </span>
                 <div className="h-3 w-px bg-hairline" />
-                <span className="text-[10px] font-medium uppercase tracking-tight text-muted-foreground">{totalRows.toLocaleString()} rows in view</span>
+                <span className="text-[10px] font-medium uppercase tracking-tight text-muted-foreground">{totalRows.toLocaleString()} rows</span>
               </>
             )}
           </div>
           {done && (
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <label className="flex items-center gap-1">
+                <span>Rows:</span>
+                <select value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  className="rounded border border-border bg-card px-1 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring">
+                  {[25, 50, 100, 250].map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="h-3 w-px bg-hairline" />
               <button disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}
                 className="rounded border border-border px-1.5 py-0.5 hover:text-foreground disabled:opacity-40">Prev</button>
-              <span className="font-mono">Page {page} / {Math.max(1, Math.ceil(totalRows / pageSize))}</span>
+              <span className="font-mono">{page} / {Math.max(1, Math.ceil(totalRows / pageSize))}</span>
               <button disabled={page * pageSize >= totalRows} onClick={() => setPage((p) => p + 1)}
                 className="rounded border border-border px-1.5 py-0.5 hover:text-foreground disabled:opacity-40">Next</button>
             </div>
@@ -624,17 +635,17 @@ export function ResultsScreen({ setup, onBack }: { setup: JobSetup; onBack: () =
       </div>
 
       {/* Changes list sidebar */}
-      <aside className="flex w-72 shrink-0 flex-col border-l border-hairline bg-surface">
+      <aside className="flex w-72 shrink-0 flex-col border-l border-hairline bg-card">
         <div className="flex items-center justify-between border-b border-hairline p-3">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Changes</h3>
-          <span className="rounded bg-accent px-1.5 py-0.5 font-mono text-[10px]">{done ? totalChanges : "-"} total</span>
+          <span className="rounded bg-card px-1.5 py-0.5 font-mono text-[10px]">{done ? totalChanges : "-"} total</span>
         </div>
         <div className="flex-1 divide-y divide-hairline overflow-y-auto">
           {done && rows.length === 0 && <p className="p-4 text-xs text-muted-foreground">No changes to show.</p>}
           {done && rows.map((row) =>
             row.changes.filter((c) => c.type === "added" || c.type === "deleted" || c.type === "modified").map((c) => (
               <button key={c.ref} type="button" onClick={() => setActive(String(row.rowNumber))}
-                className={cn("block w-full p-3 text-left transition-colors hover:bg-accent/40", active === String(row.rowNumber) && "bg-accent/50")}>
+                className={cn("block w-full p-3 text-left transition-colors hover:bg-card/40", active === String(row.rowNumber) && "bg-card/50")}>
                 <div className="mb-1 flex items-center justify-between">
                   <span className={cn("font-mono text-[11px] font-semibold", kindColor[c.type as keyof typeof kindColor] ?? "")}>
                     {c.ref} ({c.type})

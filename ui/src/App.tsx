@@ -3,6 +3,7 @@ import { AppHeader, type Step } from "@/components/diff/AppHeader";
 import { UploadScreen } from "@/components/diff/UploadScreen";
 import { ConfigureScreen } from "@/components/diff/ConfigureScreen";
 import { ResultsScreen } from "@/components/diff/ResultsScreen";
+import { useTheme } from "@/hooks/use-theme";
 
 export type UploadedFile = {
   path: string;
@@ -33,6 +34,7 @@ export default function App() {
     results: false,
   });
   const [setup, setSetup] = useState<JobSetup | null>(null);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
@@ -43,6 +45,8 @@ export default function App() {
           setStep(s);
         }}
         reached={reached}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       {step === "upload" && (
         <UploadScreen

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -25,6 +28,8 @@ const maxUploadBytes = 4 << 30 // 4 GB
 var registry = job.NewRegistry()
 var uploadsDir = "./uploads"
 var jobsDir = "./jobs"
+var httpServer *http.Server
+var enableLogs bool
 
 type diffRequest struct {
 	Original string `json:"original"`
@@ -315,20 +320,103 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	local := flag.Bool("local", true, "bind to localhost only (default)")
+	network := flag.String("network", "", "bind address (e.g. 0.0.0.0 for all interfaces, overrides --local)")
+	logsFlag := flag.Bool("logs", false, "enable verbose request logging")
+	flag.Parse()
+	enableLogs = *logsFlag
+
+	var bindHost string
+	if *network != "" {
+		bindHost = *network
+	} else if *local {
+		bindHost = "127.0.0.1"
+	} else {
+		bindHost = "0.0.0.0"
+	}
+
 	os.MkdirAll(uploadsDir, 0755)
 	os.MkdirAll(jobsDir, 0755)
-	http.HandleFunc("/api/diff", handleDiff)
-	http.HandleFunc("/api/upload", handleUpload)
-	http.HandleFunc("/api/sheets", handleSheets)
-	http.HandleFunc("/api/jobs", handleCreateJob)
-	http.HandleFunc("/api/jobs/", handleJobsSub)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/diff", handleDiff)
+	mux.HandleFunc("/api/upload", handleUpload)
+	mux.HandleFunc("/api/sheets", handleSheets)
+	mux.HandleFunc("/api/jobs", handleCreateJob)
+	mux.HandleFunc("/api/jobs/", handleJobsSub)
+	mux.HandleFunc("/api/shutdown", handleShutdown)
+	mux.HandleFunc("/api/restart", handleRestart)
 	if hasUIBuild() {
-		http.Handle("/", uiHandler())
+		mux.Handle("/", uiHandler())
 	} else {
-		http.Handle("/", http.FileServer(http.Dir("./static")))
+		mux.Handle("/", http.FileServer(http.Dir("./static")))
 	}
-	log.Println("Listening on http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+
+	httpServer = &http.Server{
+		Addr:    bindHost + ":8080",
+		Handler: mux,
+	}
+
+	if enableLogs {
+		httpServer.Handler = logMiddleware(mux)
+	}
+
+	log.Printf("Listening on http://%s:8080", bindHost)
+	go func() {
+		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	<-quit
+	log.Println("Shutting down...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	httpServer.Shutdown(ctx)
+}
+
+func logMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s %s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+	})
+}
+
+func handleShutdown(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "shutting down"})
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpServer.Shutdown(ctx)
+	}()
+}
+
+func handleRestart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpServer.Shutdown(ctx)
+		// re-exec same binary
+		cmd := exec.Command(os.Args[0], os.Args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Start()
+	}()
 }
 
 func handleJobsSub(w http.ResponseWriter, r *http.Request) {

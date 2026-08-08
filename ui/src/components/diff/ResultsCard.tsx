@@ -3,16 +3,16 @@ import { cn } from "@/lib/utils";
 import type { Change, ResultRow } from "@/api";
 
 const kindColor = {
-  modified: "text-diff-mod",
-  added: "text-diff-add",
-  deleted: "text-diff-del",
+  modified: "text-neon-yellow",
+  added: "text-neon-green",
+  deleted: "text-neon-red",
 } as const;
 
 const statusBadge = {
-  equal: "bg-muted text-muted-foreground",
-  modified: "bg-diff-mod/15 text-diff-mod",
-  added: "bg-diff-add/15 text-diff-add",
-  deleted: "bg-diff-del/15 text-diff-del",
+  equal: "bg-secondary text-muted-foreground",
+  modified: "bg-neon-yellow/15 text-neon-yellow",
+  added: "bg-neon-green/15 text-neon-green",
+  deleted: "bg-neon-red/15 text-neon-red",
 } as const;
 
 function colLetter(n: number) {
@@ -103,11 +103,11 @@ function ResultCard({
   return (
     <div
       className={cn(
-        "rounded-lg border bg-surface transition-colors",
+        "rounded-lg border bg-card transition-colors",
         isActive ? "border-ring" : "border-border",
-        row.status === "modified" && "bg-diff-mod/5",
-        row.status === "added" && "bg-diff-add/5",
-        row.status === "deleted" && "bg-diff-del/5",
+        row.status === "modified" && "border-neon-yellow/30",
+        row.status === "added" && "border-neon-green/30",
+        row.status === "deleted" && "border-neon-red/30",
       )}
       onClick={onToggle}
     >
@@ -142,7 +142,7 @@ function ResultCard({
                 key={cell.col}
                 className={cn(
                   "flex items-start gap-2 rounded px-2 py-1.5",
-                  cell.change && "bg-diff-mod/8",
+                  cell.change && "bg-neon-yellow/5",
                 )}
               >
                 <span className="shrink-0 font-mono text-[10px] font-semibold text-muted-foreground">

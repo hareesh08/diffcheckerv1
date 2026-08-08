@@ -157,3 +157,11 @@ export function downloadBlob(blob: Blob, name: string) {
   a.remove();
   URL.revokeObjectURL(url);
 }
+
+export function shutdownServer(): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/shutdown", { method: "POST" });
+}
+
+export function restartServer(): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/restart", { method: "POST" });
+}
