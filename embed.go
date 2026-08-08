@@ -5,7 +5,6 @@ import (
 	"embed"
 	"io/fs"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -39,11 +38,17 @@ func uiHandler() http.Handler {
 }
 
 // hasUIBuild reports whether a real ui/dist build (not the placeholder) is present.
-// It detects a real Vite build by the hashed /assets/ bundle reference rather than
-// by a placeholder marker, so no marker string is ever emitted into the compiled
-// binary (a marker literal in source would trip CI's binary verification grep).
+// It inspects the EMBEDDED filesystem so the binary is self-contained and its
+// behavior never depends on the current working directory. It detects a real Vite
+// build by the hashed /assets/ bundle reference rather than by a placeholder marker,
+// so no marker string is ever emitted into the compiled binary (a marker literal in
+// source would trip CI's binary verification grep).
 func hasUIBuild() bool {
-	b, err := os.ReadFile("ui/dist/index.html")
+	sub, err := fs.Sub(uiFS, "ui/dist")
+	if err != nil {
+		return false
+	}
+	b, err := fs.ReadFile(sub, "index.html")
 	if err != nil {
 		return false
 	}
