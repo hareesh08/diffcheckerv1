@@ -30,9 +30,28 @@ jobs:
         run: bun install
         working-directory: ui
 
+      - name: Clean UI build output
+        run: rm -rf ui/dist
+
       - name: Build React UI (static SPA)
         run: bun run build
         working-directory: ui
+
+      - name: Inspect UI build output
+        run: |
+          echo "--- ui/dist tree ---"
+          find ui/dist -type f | sort
+          echo "--- ui/dist/index.html ---"
+          cat ui/dist/index.html | head -25
+          if [ ! -s ui/dist/index.html ]; then
+            echo "::error::ui/dist/index.html missing or empty after bun build"
+            exit 1
+          fi
+          if grep -q "UI_NOT_BUILT" ui/dist/index.html; then
+            echo "::error::Placeholder ui/dist/index.html still present — real build did not land"
+            exit 1
+          fi
+          echo "OK: real UI build present"
 
       - name: Build single binary
         run: go build -trimpath -o diffchecker.exe .
@@ -41,7 +60,7 @@ jobs:
       - name: Verify embedded UI present
         run: |
           if strings diffchecker.exe | grep -q "UI_NOT_BUILT"; then
-            echo "::error::Placeholder UI embedded — bun build did not overwrite ui/dist/index.html"
+            echo "::error::Placeholder UI embedded in binary"
             exit 1
           else
             echo "OK: real UI embedded"
