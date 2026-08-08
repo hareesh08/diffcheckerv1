@@ -62,6 +62,9 @@ func (db *DB) PutRow(jobID, side string, row Row, hash string) error {
 }
 
 func (db *DB) PutResult(jobID string, rowNumber int, status string, changes []Change) error {
+	if changes == nil {
+		changes = []Change{}
+	}
 	b, err := json.Marshal(changes)
 	if err != nil { return err }
 	_, err = db.conn.Exec(`INSERT OR REPLACE INTO results(job_id,row_number,status,changes_json) VALUES(?,?,?,?)`, jobID, rowNumber, status, b)
@@ -105,6 +108,9 @@ func (w *ResultWriter) begin() error {
 }
 
 func (w *ResultWriter) Put(rowNumber int, status string, changes []Change) error {
+	if changes == nil {
+		changes = []Change{}
+	}
 	b, err := json.Marshal(changes)
 	if err != nil {
 		return err
@@ -179,6 +185,9 @@ func (db *DB) Results(jobID, filter string, page, pageSize int) ([]ResultRow, in
 		var r ResultRow; var raw []byte
 		if err := rows.Scan(&r.RowNumber, &r.Status, &raw); err != nil { return nil, 0, err }
 		if err := json.Unmarshal(raw, &r.Changes); err != nil { return nil, 0, err }
+		if r.Changes == nil {
+			r.Changes = []Change{}
+		}
 		out = append(out, r)
 	}
 	return out, total, rows.Err()

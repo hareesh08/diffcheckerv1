@@ -85,6 +85,9 @@ func TestRunRowsMode(t *testing.T) {
 	}
 	found := false
 	for _, r := range rows {
+		if r.Changes == nil {
+			t.Fatalf("row %d has nil changes; want empty array", r.RowNumber)
+		}
 		if r.RowNumber == 2 && r.Status == "modified" {
 			found = true
 			if len(r.Changes) != 1 || r.Changes[0].Ref != "B2" || r.Changes[0].Old != "AF" || r.Changes[0].New != "AS" {

@@ -113,9 +113,16 @@ export async function getJobRows(jobId: string, params: JobRow = {}): Promise<Ro
   if (params.page) q.set("page", String(params.page));
   if (params.pageSize) q.set("pageSize", String(params.pageSize));
   const query = q.toString();
-  return request<RowsResponse>(
+  const response = await request<RowsResponse>(
     `/api/jobs/${encodeURIComponent(jobId)}/rows${query ? `?${query}` : ""}`,
   );
+  return {
+    ...response,
+    rows: (response.rows ?? []).map((row) => ({
+      ...row,
+      changes: row.changes ?? [],
+    })),
+  };
 }
 
 export function cancelJob(jobId: string): Promise<void> {
