@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -38,10 +39,13 @@ func uiHandler() http.Handler {
 }
 
 // hasUIBuild reports whether a real ui/dist build (not the placeholder) is present.
+// It detects a real Vite build by the hashed /assets/ bundle reference rather than
+// by a placeholder marker, so no marker string is ever emitted into the compiled
+// binary (a marker literal in source would trip CI's binary verification grep).
 func hasUIBuild() bool {
 	b, err := os.ReadFile("ui/dist/index.html")
 	if err != nil {
 		return false
 	}
-	return !strings.Contains(string(b), "UI_NOT_BUILT")
+	return bytes.Contains(b, []byte("/assets/"))
 }
