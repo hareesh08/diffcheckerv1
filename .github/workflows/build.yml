@@ -59,8 +59,7 @@ jobs:
           GOARCH: amd64
           CGO_ENABLED: "0"
         run: |
-          go install github.com/akavel/rsrc@v0.10.2
-          "$(go env GOPATH)/bin/rsrc" -ico app.ico -o app.syso
+          go run github.com/akavel/rsrc@v0.10.2 -ico app.ico -o app.syso
           go build -trimpath -o differ-pro.exe .
         working-directory: .
 
