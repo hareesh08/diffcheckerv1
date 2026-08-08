@@ -53,13 +53,19 @@ jobs:
           fi
           echo "OK: real UI build present"
 
+      # rsrc must be built for the HOST (linux) so the runner can execute it.
+      # Building it under the GOOS=windows env below would produce a Windows exe
+      # that fails with "exec format error" when the runner tries to run it.
+      - name: Install rsrc (host build)
+        run: go install github.com/akavel/rsrc@v0.10.2
+
       - name: Build single windows binary
         env:
           GOOS: windows
           GOARCH: amd64
           CGO_ENABLED: "0"
         run: |
-          go run github.com/akavel/rsrc@v0.10.2 -ico app.ico -o app.syso
+          "$(go env GOPATH)/bin/rsrc" -ico app.ico -o app.syso
           go build -trimpath -o differ-pro.exe .
         working-directory: .
 

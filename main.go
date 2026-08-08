@@ -177,11 +177,12 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil {
-				registry.Update(j.ID, func(jj *job.Job) {
+				j.Update(func(jj *job.Job) {
 					jj.Status = job.StatusFailed
 					jj.Error = fmt.Sprintf("panic: %v", rec)
 					jj.CompletedAt = time.Now()
-				})			}
+				})
+			}
 		}()
 		job.Run(ctx, j)
 	}()
@@ -198,7 +199,7 @@ func handleJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(j)
+	json.NewEncoder(w).Encode(j.Snapshot())
 }
 
 func handleJobCancel(w http.ResponseWriter, r *http.Request) {

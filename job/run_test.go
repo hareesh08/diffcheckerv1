@@ -132,6 +132,134 @@ func TestRunIgnoreOptions(t *testing.T) {
 	}
 }
 
+func TestRunTableMode(t *testing.T) {
+	dir := t.TempDir()
+	orig := filepath.Join(dir, "o.csv")
+	changed := filepath.Join(dir, "c.csv")
+	dbPath := filepath.Join(dir, "r.db")
+
+	writeCSV(t, orig, [][]string{
+		{"Name", "Code"},
+		{"Afghanistan", "AF"},
+		{"Albania", "AL"},
+		{"Algeria", "DZ"},
+	})
+	writeCSV(t, changed, [][]string{
+		{"Name", "Code"},
+		{"Afghanistan", "AS"},
+		{"Algeria", "DZ"},
+	})
+
+	j := &Job{
+		ID: "test-table", OriginalPath: orig, ChangedPath: changed, StorePath: dbPath,
+		Options: Options{Mode: "table", HeaderRow: 1},
+	}
+	Run(context.Background(), j)
+	if j.Status != StatusCompleted {
+		t.Fatalf("status = %s (%s), want completed", j.Status, j.Error)
+	}
+	if j.Summary.ModifiedRows != 1 || j.Summary.DeletedRows != 1 || j.Summary.MatchedRows != 1 {
+		t.Fatalf("summary = %+v, want modified=1 deleted=1 matched=1", j.Summary)
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, total, err := db.Results(j.ID, "all", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 {
+		t.Fatalf("total = %d, want 3", total)
+	}
+	// Header row must not be compared as data row 1.
+	if rows[0].RowNumber == 1 && rows[0].Status != "deleted" && rows[0].Status != "modified" && rows[0].Status != "added" {
+		t.Fatalf("unexpected first result row: %+v", rows[0])
+	}
+	var sawDel, sawMod, sawMatch bool
+	for _, r := range rows {
+		switch r.Status {
+		case "deleted":
+			sawDel = true
+		case "modified":
+			sawMod = true
+			if len(r.Changes) != 1 || r.Changes[0].Ref != "B1" {
+				t.Fatalf("modified changes = %+v, want B1", r.Changes)
+			}
+		case "equal":
+			sawMatch = true
+		}
+	}
+	if !sawDel || !sawMod || !sawMatch {
+		t.Fatalf("want deleted+modified+equal rows, got %+v", rows)
+	}
+}
+
+func TestRunTableModeInsertAndReorder(t *testing.T) {
+	dir := t.TempDir()
+	orig := filepath.Join(dir, "o.csv")
+	changed := filepath.Join(dir, "c.csv")
+	dbPath := filepath.Join(dir, "r.db")
+
+	// Original: 3 data rows keyed by "Name".
+	writeCSV(t, orig, [][]string{
+		{"Name", "Code"},
+		{"Afghanistan", "AF"},
+		{"Albania", "AL"},
+		{"Algeria", "DZ"},
+	})
+	// Changed: inserts "Andorra" mid-file, reorders Code/Name columns.
+	writeCSV(t, changed, [][]string{
+		{"Code", "Name"},
+		{"AF", "Afghanistan"},
+		{"AD", "Andorra"},
+		{"AL", "Albania"},
+		{"DZ", "Algeria"},
+	})
+
+	j := &Job{
+		ID: "test-insert", OriginalPath: orig, ChangedPath: changed, StorePath: dbPath,
+		Options: Options{Mode: "table", HeaderRow: 1, RowKeyColumn: "Name"},
+	}
+	Run(context.Background(), j)
+	if j.Status != StatusCompleted {
+		t.Fatalf("status = %s (%s), want completed", j.Status, j.Error)
+	}
+	if j.Summary.ModifiedRows != 0 || j.Summary.AddedRows != 1 || j.Summary.MatchedRows != 3 {
+		t.Fatalf("summary = %+v, want added=1 matched=3", j.Summary)
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, total, err := db.Results(j.ID, "all", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 4 {
+		t.Fatalf("total = %d, want 4 (3 matched + 1 added, no row overwritten)", total)
+	}
+	var sawAdd, sawMatch bool
+	var addRowNumber int
+	for _, r := range rows {
+		if r.Status == "added" {
+			sawAdd = true
+			addRowNumber = r.RowNumber
+		}
+		if r.Status == "equal" {
+			sawMatch = true
+		}
+	}
+	if !sawAdd || !sawMatch {
+		t.Fatalf("want added+equal rows, got %+v", rows)
+	}
+	_ = addRowNumber
+}
+
 func TestRunCancel(t *testing.T) {
 	dir := t.TempDir()
 	orig := filepath.Join(dir, "a.csv")

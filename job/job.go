@@ -33,6 +33,7 @@ type Options struct {
 }
 
 type Job struct {
+	mu            sync.RWMutex
 	ID            string    `json:"id"`
 	Status        Status    `json:"status"`
 	Mode          string    `json:"mode"`
@@ -49,6 +50,38 @@ type Job struct {
 	Summary       Summary   `json:"summary"`
 	StorePath     string    `json:"-"`
 	cancel        context.CancelFunc
+}
+
+// Update applies fn to the job under its own lock, so field writes from the
+// run goroutine can never race with status reads from the HTTP handlers.
+func (j *Job) Update(fn func(*Job)) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	fn(j)
+}
+
+// Snapshot returns a detached copy of the job for lock-free JSON encoding.
+func (j *Job) Snapshot() *Job {
+	j.mu.RLock()
+	defer j.mu.RUnlock()
+	c := Job{
+		ID:            j.ID,
+		Status:        j.Status,
+		Mode:          j.Mode,
+		OriginalName:  j.OriginalName,
+		ChangedName:   j.ChangedName,
+		OriginalPath:  j.OriginalPath,
+		ChangedPath:   j.ChangedPath,
+		Options:       j.Options,
+		Progress:      j.Progress,
+		ProgressLabel: j.ProgressLabel,
+		Error:         j.Error,
+		CreatedAt:     j.CreatedAt,
+		CompletedAt:   j.CompletedAt,
+		Summary:       j.Summary,
+		StorePath:     j.StorePath,
+	}
+	return &c
 }
 
 type Summary struct {
@@ -105,14 +138,18 @@ func (r *Registry) Update(id string, fn func(*Job)) {
 
 func (r *Registry) Cancel(id string) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	if j, ok := r.jobs[id]; ok {
-		if j.Status == StatusQueued || j.Status == StatusParsing || j.Status == StatusComparing {
-			j.Status = StatusCancelled
-			j.CompletedAt = time.Now()
-			if j.cancel != nil {
-				j.cancel()
-			}
+	j, ok := r.jobs[id]
+	r.mu.Unlock()
+	if !ok {
+		return
+	}
+	if j.Status == StatusQueued || j.Status == StatusParsing || j.Status == StatusComparing {
+		j.Update(func(jj *Job) {
+			jj.Status = StatusCancelled
+			jj.CompletedAt = time.Now()
+		})
+		if j.cancel != nil {
+			j.cancel()
 		}
 	}
 }
