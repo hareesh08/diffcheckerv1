@@ -1,6 +1,8 @@
-# Diff Checker
+# Differ Pro
 
 Local web app for comparing text and spreadsheet files side-by-side, built with Go.
+
+Author: Hareesh D
 
 ## Run
 

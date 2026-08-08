@@ -1,6 +1,7 @@
 # Built binary
 diffchecker.exe
 *.exe
+app.syso
 
 # Runtime data
 uploads/
@@ -15,3 +16,11 @@ jobs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Tooling caches
+.gocache/
+.codex/
+graphify-out/
+*.zip
+*.exe~
+*.txt~

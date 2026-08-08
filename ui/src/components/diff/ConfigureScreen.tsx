@@ -16,10 +16,10 @@ function Preview({
   sheets: string[];
 }) {
   return (
-    <div className="flex flex-col rounded-md border border-border bg-surface">
+    <div className="clay-card flex flex-col rounded-2xl">
       <div className="flex items-center justify-between border-b border-hairline px-3 py-2">
-        <span className="truncate font-mono text-[11px] text-foreground">{file.name}</span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span className="min-w-0 truncate font-mono text-[11px] text-foreground">{file.name}</span>
+        <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
           Source {side}
         </span>
       </div>
@@ -67,65 +67,29 @@ export function ConfigureScreen({
 
   return (
     <div className="flex-1 overflow-auto">
-      <div className="mx-auto max-w-6xl px-6 py-8">
-        <h1 className="text-lg font-semibold tracking-tight">Analysis parameters</h1>
-        <p className="mt-0.5 mb-6 text-xs text-muted-foreground">
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+        <p className="eyebrow mb-2">Workspace / Configure</p>
+        <h1 className="text-3xl font-bold tracking-[-0.045em]">Tune the comparison.</h1>
+        <p className="mt-2 mb-8 max-w-lg text-sm leading-relaxed text-muted-foreground">
           Confirm sheets, headers, and match logic before running the engine.
         </p>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Preview
-            file={fileA}
-            side="A"
-            sheet={sheetA}
-            sheets={fileA.sheets.length ? fileA.sheets : [sheetA]}
-            onSheet={(v) => patch({ sheetA: v })}
-          />
-          <Preview
-            file={fileB}
-            side="B"
-            sheet={sheetB}
-            sheets={fileB.sheets.length ? fileB.sheets : [sheetB]}
-            onSheet={(v) => patch({ sheetB: v })}
-          />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Preview file={fileA} side="A" sheet={sheetA} sheets={fileA.sheets.length ? fileA.sheets : [sheetA]} onSheet={(v) => patch({ sheetA: v })} />
+          <Preview file={fileB} side="B" sheet={sheetB} sheets={fileB.sheets.length ? fileB.sheets : [sheetB]} onSheet={(v) => patch({ sheetB: v })} />
         </div>
 
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <div className="col-span-2 grid grid-cols-2 gap-3">
-            {(
-              [
-                {
-                  id: "table" as const,
-                  title: "Table — header based",
-                  body: "Aligns rows by matching column names. Best when columns move or rows are reordered.",
-                },
-                {
-                  id: "rows" as const,
-                  title: "Rows — sequential",
-                  body: "Compares index by index. Best for append-only logs and fixed exports.",
-                },
-              ]
-            ).map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => {
-                  setMode(m.id);
-                  patchOptions({ mode: m.id });
-                }}
-                className={cn(
-                  "flex gap-3 rounded-md border p-3 text-left transition-colors",
-                  mode === m.id
-                    ? "border-foreground bg-surface"
-                    : "border-border bg-surface hover:border-muted-foreground",
-                )}
-              >
-                <div
-                  className={cn(
-                    "mt-0.5 size-3 shrink-0 rounded-full",
-                    mode === m.id ? "border-4 border-foreground" : "border border-muted-foreground",
-                  )}
-                />
+        <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-2">
+            {([
+              { id: "table" as const, title: "Table — header based", body: "Aligns rows by matching column names. Best when columns move or rows are reordered." },
+              { id: "rows" as const, title: "Rows — sequential", body: "Compares index by index. Best for append-only logs and fixed exports." },
+            ]).map((m) => (
+              <button key={m.id} type="button" onClick={() => { setMode(m.id); patchOptions({ mode: m.id }); }}
+                className={cn("clay-card flex gap-3 rounded-2xl border p-4 text-left transition-all",
+                  mode === m.id ? "border-foreground bg-surface" : "border-border bg-surface hover:border-muted-foreground")}>
+                <div className={cn("mt-0.5 size-3 shrink-0 rounded-full",
+                  mode === m.id ? "border-4 border-foreground" : "border border-muted-foreground")} />
                 <div>
                   <p className="text-xs font-semibold">{m.title}</p>
                   <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">{m.body}</p>
@@ -134,61 +98,29 @@ export function ConfigureScreen({
             ))}
           </div>
 
-          <div className="flex flex-col justify-between rounded-md border border-border bg-surface p-3">
+          <div className="clay-card flex flex-col justify-between rounded-2xl p-4">
             <div className="space-y-2">
               {[
-                {
-                  label: "Ignore whitespace",
-                  on: options.ignoreWhitespace,
-                  set: (v: boolean) => patchOptions({ ignoreWhitespace: v }),
-                },
-                {
-                  label: "Ignore case",
-                  on: options.ignoreCase,
-                  set: (v: boolean) => patchOptions({ ignoreCase: v }),
-                },
+                { label: "Ignore whitespace", on: options.ignoreWhitespace, set: (v: boolean) => patchOptions({ ignoreWhitespace: v }) },
+                { label: "Ignore case", on: options.ignoreCase, set: (v: boolean) => patchOptions({ ignoreCase: v }) },
               ].map((t) => (
-                <button
-                  key={t.label}
-                  type="button"
-                  onClick={() => t.set(!t.on)}
-                  className="flex w-full items-center justify-between py-0.5"
-                >
+                <button key={t.label} type="button" onClick={() => t.set(!t.on)} className="flex w-full items-center justify-between py-0.5">
                   <span className="text-[11px] font-medium">{t.label}</span>
-                  <span
-                    className={cn(
-                      "relative h-4 w-7 rounded-full transition-colors",
-                      t.on ? "bg-primary" : "bg-accent",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 size-3 rounded-full bg-surface shadow-sm ring-1 ring-hairline transition-all",
-                        t.on ? "left-3.5" : "left-0.5",
-                      )}
-                    />
+                  <span className={cn("relative h-4 w-7 rounded-full transition-colors", t.on ? "bg-primary" : "bg-accent")}>
+                    <span className={cn("absolute top-0.5 size-3 rounded-full bg-surface shadow-sm ring-1 ring-hairline transition-all", t.on ? "left-3.5" : "left-0.5")} />
                   </span>
                 </button>
               ))}
               <div>
-                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Header line
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={options.headerRow}
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Header line</label>
+                <input type="number" min={0} value={options.headerRow}
                   onChange={(e) => patchOptions({ headerRow: Number(e.target.value) })}
-                  className="w-full rounded border border-border bg-grid px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
-                />
+                  className="w-full rounded border border-border bg-grid px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring" />
               </div>
             </div>
-            <button
-              type="button"
-              onClick={onRun}
-              className="mt-4 w-full rounded-md bg-diff-add px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-            >
-              Find difference
+            <button type="button" onClick={onRun}
+              className="mt-4 w-full rounded-md bg-diff-add px-3 py-2.5 text-xs font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 sm:py-2">
+              Run comparison
             </button>
           </div>
         </div>

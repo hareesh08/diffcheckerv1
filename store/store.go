@@ -24,9 +24,11 @@ type Change struct {
 }
 
 type ResultRow struct {
-	RowNumber int      `json:"rowNumber"`
-	Status    string   `json:"status"`
-	Changes   []Change `json:"changes"`
+	RowNumber      int      `json:"rowNumber"`
+	Status         string   `json:"status"`
+	Changes        []Change `json:"changes"`
+	OriginalValues []string `json:"originalValues,omitempty"`
+	ChangedValues  []string `json:"changedValues,omitempty"`
 }
 
 type Summary struct {
@@ -43,7 +45,10 @@ func Open(path string) (*DB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil { return nil, err }
 	db.SetMaxOpenConns(1)
+	// busy_timeout matters because reads (job rows, export) open a second pool
+	// to the same file while a job's writer still holds an open transaction.
 	_, err = db.Exec(`PRAGMA journal_mode=WAL;
+PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS rows (job_id TEXT, side TEXT, row_number INTEGER, row_json BLOB, row_hash TEXT, PRIMARY KEY(job_id, side, row_number));
 CREATE TABLE IF NOT EXISTS results (job_id TEXT, row_number INTEGER PRIMARY KEY, status TEXT, changes_json BLOB);
 CREATE INDEX IF NOT EXISTS results_job_status ON results(job_id, status);
@@ -54,35 +59,22 @@ CREATE INDEX IF NOT EXISTS results_job_status ON results(job_id, status);
 
 func (db *DB) Close() error { return db.conn.Close() }
 
-func (db *DB) PutRow(jobID, side string, row Row, hash string) error {
-	b, err := json.Marshal(row.Values)
-	if err != nil { return err }
-	_, err = db.conn.Exec(`INSERT OR REPLACE INTO rows(job_id,side,row_number,row_json,row_hash) VALUES(?,?,?,?,?)`, jobID, side, row.Number, b, hash)
-	return err
-}
-
-func (db *DB) PutResult(jobID string, rowNumber int, status string, changes []Change) error {
-	if changes == nil {
-		changes = []Change{}
-	}
-	b, err := json.Marshal(changes)
-	if err != nil { return err }
-	_, err = db.conn.Exec(`INSERT OR REPLACE INTO results(job_id,row_number,status,changes_json) VALUES(?,?,?,?)`, jobID, rowNumber, status, b)
-	return err
-}
-
 // ResultWriter batches result inserts into transactions for performance.
 type ResultWriter struct {
 	db        *DB
 	jobID     string
 	tx        *sql.Tx
 	stmt      *sql.Stmt
+	rowStmt   *sql.Stmt
 	batchSize int
 	batched   int
 }
 
 // NewResultWriter returns a writer that batches inserts in one transaction,
 // committing every batchSize rows.
+//
+// All writes for a job must go through this writer (Put and PutRow), because it
+// holds the pool's only connection for the lifetime of its transaction.
 func NewResultWriter(db *DB, jobID string, batchSize int) (*ResultWriter, error) {
 	w := &ResultWriter{db: db, jobID: jobID, batchSize: batchSize}
 	if err := w.begin(); err != nil {
@@ -101,10 +93,42 @@ func (w *ResultWriter) begin() error {
 		tx.Rollback()
 		return err
 	}
+	rowStmt, err := tx.Prepare(`INSERT OR REPLACE INTO rows(job_id,side,row_number,row_json,row_hash) VALUES(?,?,?,?,?)`)
+	if err != nil {
+		stmt.Close()
+		tx.Rollback()
+		return err
+	}
 	w.tx = tx
 	w.stmt = stmt
+	w.rowStmt = rowStmt
 	w.batched = 0
 	return nil
+}
+
+// PutRow stores the raw cell values for one side of a row inside the writer's
+// current transaction, so the UI can render whole rows and not just the cells
+// that changed. It reuses the writer's connection, which matters because Open
+// caps the pool at one connection: any write taking its own connection while
+// this transaction is open would block forever.
+func (w *ResultWriter) PutRow(side string, row Row) error {
+	b, err := json.Marshal(row.Values)
+	if err != nil {
+		return err
+	}
+	_, err = w.rowStmt.Exec(w.jobID, side, row.Number, b, "")
+	return err
+}
+
+// closeStmts releases both prepared statements, always attempting each one.
+func (w *ResultWriter) closeStmts() error {
+	err := w.stmt.Close()
+	if rerr := w.rowStmt.Close(); err == nil {
+		err = rerr
+	}
+	w.stmt = nil
+	w.rowStmt = nil
+	return err
 }
 
 func (w *ResultWriter) Put(rowNumber int, status string, changes []Change) error {
@@ -130,28 +154,32 @@ func (w *ResultWriter) Flush() error {
 	if w.tx == nil {
 		return nil
 	}
-	if err := w.stmt.Close(); err != nil {
-		return err
-	}
-	if err := w.tx.Commit(); err != nil {
-		return err
-	}
-	w.tx = nil
-	w.stmt = nil
-	return w.begin()
-}
-
-// Close flushes any remaining rows.
-func (w *ResultWriter) Close() error {
-	if w.tx == nil {
-		return nil
-	}
-	if err := w.stmt.Close(); err != nil {
+	if err := w.closeStmts(); err != nil {
+		w.tx.Rollback()
+		w.tx = nil
 		return err
 	}
 	err := w.tx.Commit()
 	w.tx = nil
-	w.stmt = nil
+	if err != nil {
+		return err
+	}
+	return w.begin()
+}
+
+// Close commits any remaining rows. It is idempotent, so callers may commit
+// early and still leave a deferred Close in place as a panic safety net.
+func (w *ResultWriter) Close() error {
+	if w.tx == nil {
+		return nil
+	}
+	if err := w.closeStmts(); err != nil {
+		w.tx.Rollback()
+		w.tx = nil
+		return err
+	}
+	err := w.tx.Commit()
+	w.tx = nil
 	return err
 }
 
@@ -167,27 +195,35 @@ func (db *DB) Summary(jobID string) (Summary, error) {
 }
 
 func (db *DB) Results(jobID, filter string, page, pageSize int) ([]ResultRow, int, error) {
-	where := "job_id=?"
+	where := "r.job_id=?"
 	args := []any{jobID}
 	switch filter {
-	case "matches": where += " AND status='equal'"
-	case "nonmatches": where += " AND status!='equal'"
-	case "modified", "added", "deleted": where += " AND status=?"; args = append(args, filter)
+	case "matches": where += " AND r.status='equal'"
+	case "nonmatches": where += " AND r.status!='equal'"
+	case "modified", "added", "deleted": where += " AND r.status=?"; args = append(args, filter)
 	}
 	var total int
-	if err := db.conn.QueryRow("SELECT COUNT(*) FROM results WHERE "+where, args...).Scan(&total); err != nil { return nil, 0, err }
+	if err := db.conn.QueryRow("SELECT COUNT(*) FROM results r WHERE "+where, args...).Scan(&total); err != nil { return nil, 0, err }
 	args = append(args, pageSize, page*pageSize)
-	rows, err := db.conn.Query("SELECT row_number,status,changes_json FROM results WHERE "+where+" ORDER BY row_number LIMIT ? OFFSET ?", args...)
+	query := `SELECT r.row_number, r.status, r.changes_json,
+		o.row_json, c.row_json
+		FROM results r
+		LEFT JOIN rows o ON r.job_id=o.job_id AND o.side='original' AND r.row_number=o.row_number
+		LEFT JOIN rows c ON r.job_id=c.job_id AND c.side='changed' AND r.row_number=c.row_number
+		WHERE ` + where + ` ORDER BY r.row_number LIMIT ? OFFSET ?`
+	rows, err := db.conn.Query(query, args...)
 	if err != nil { return nil, 0, err }
 	defer rows.Close()
 	var out []ResultRow
 	for rows.Next() {
-		var r ResultRow; var raw []byte
-		if err := rows.Scan(&r.RowNumber, &r.Status, &raw); err != nil { return nil, 0, err }
+		var r ResultRow; var raw, origRaw, changedRaw []byte
+		if err := rows.Scan(&r.RowNumber, &r.Status, &raw, &origRaw, &changedRaw); err != nil { return nil, 0, err }
 		if err := json.Unmarshal(raw, &r.Changes); err != nil { return nil, 0, err }
-		if r.Changes == nil {
-			r.Changes = []Change{}
-		}
+		if r.Changes == nil { r.Changes = []Change{} }
+		if origRaw != nil { _ = json.Unmarshal(origRaw, &r.OriginalValues) }
+		if changedRaw != nil { _ = json.Unmarshal(changedRaw, &r.ChangedValues) }
+		if r.OriginalValues == nil { r.OriginalValues = []string{} }
+		if r.ChangedValues == nil { r.ChangedValues = []string{} }
 		out = append(out, r)
 	}
 	return out, total, rows.Err()

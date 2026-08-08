@@ -47,7 +47,7 @@ export default function App() {
       {step === "upload" && (
         <UploadScreen
           onLoaded={(a, b) => {
-            setSetup(a && b ? { fileA: a, fileB: b, sheetA: a.sheets[0] ?? "", sheetB: b.sheets[0] ?? "", options: { mode: "rows", ignoreWhitespace: true, ignoreCase: false, headerRow: 1, rowKeyColumn: "" } } : null);
+            setSetup(a && b ? { fileA: a, fileB: b, sheetA: a.sheets[0] ?? "", sheetB: b.sheets[0] ?? "", options: { mode: "table", ignoreWhitespace: true, ignoreCase: false, headerRow: 1, rowKeyColumn: "" } } : null);
             setReached((r) => ({ ...r, configure: true }));
             setStep("configure");
           }}

@@ -66,6 +66,7 @@ func Run(ctx context.Context, j *Job) {
 
 	j.Status = StatusComparing
 
+	compared := 0
 	for oErr != io.EOF || nErr != io.EOF {
 		select {
 		case <-ctx.Done():
@@ -74,11 +75,35 @@ func Run(ctx context.Context, j *Job) {
 		default:
 		}
 
-		switch {
-		case oErr == io.EOF && nErr == io.EOF:
+		// Total row count is unknown while streaming, so report a live count
+		// rather than a percentage. Counted here so the added-only and
+		// deleted-only branches below still advance the label.
+		compared++
+		if compared%500 == 0 {
+			j.ProgressLabel = itoa(compared) + " rows compared"
+		}
+
+		// Do not keep looping on parser errors. In particular, encoding/csv can
+		// return a non-EOF error while leaving the reader usable; treating that
+		// error as an empty row would leave the job stuck in "comparing".
+		if oErr != nil && oErr != io.EOF {
+			done(StatusFailed, "original: "+oErr.Error())
 			return
+		}
+		if nErr != nil && nErr != io.EOF {
+			done(StatusFailed, "changed: "+nErr.Error())
+			return
+		}
+
+		switch {
 		case oErr == io.EOF:
 			// Deleted side exhausted; remaining new rows are additions.
+			// Row values must go through rw, which holds the pool's only
+			// connection; db.PutRow here would block forever.
+			if err := rw.PutRow("changed", store.Row{Number: nRowNum, Values: nRec}); err != nil {
+				done(StatusFailed, err.Error())
+				return
+			}
 			if err := rw.Put(nRowNum, "added", []store.Change{
 				{RowNumber: nRowNum, Ref: "A" + itoa(nRowNum), Type: "added"},
 			}); err != nil {
@@ -91,6 +116,10 @@ func Run(ctx context.Context, j *Job) {
 			continue
 		case nErr == io.EOF:
 			// New side exhausted; remaining old rows are deletions.
+			if err := rw.PutRow("original", store.Row{Number: oRowNum, Values: oRec}); err != nil {
+				done(StatusFailed, err.Error())
+				return
+			}
 			if err := rw.Put(oRowNum, "deleted", []store.Change{
 				{RowNumber: oRowNum, Ref: "A" + itoa(oRowNum), Type: "deleted"},
 			}); err != nil {
@@ -101,6 +130,17 @@ func Run(ctx context.Context, j *Job) {
 			oRec, oErr = origR.Next()
 			oRowNum++
 			continue
+		}
+
+		// Store raw cell values for both sides so the UI can render whole rows,
+		// not just the cells that changed.
+		if err := rw.PutRow("original", store.Row{Number: oRowNum, Values: oRec}); err != nil {
+			done(StatusFailed, err.Error())
+			return
+		}
+		if err := rw.PutRow("changed", store.Row{Number: nRowNum, Values: nRec}); err != nil {
+			done(StatusFailed, err.Error())
+			return
 		}
 
 		// Both sides have a row. Compare.
@@ -129,6 +169,16 @@ func Run(ctx context.Context, j *Job) {
 		nRowNum++
 	}
 
+	// Commit the final batch BEFORE publishing "completed". The UI polls status
+	// and fetches rows the moment it sees completed, so committing afterwards
+	// (via the deferred Close) would expose a truncated result set.
+	if err := rw.Close(); err != nil {
+		done(StatusFailed, err.Error())
+		return
+	}
+
+	j.Progress = 1
+	j.ProgressLabel = itoa(compared) + " rows compared"
 	done(StatusCompleted, "")
 }
 

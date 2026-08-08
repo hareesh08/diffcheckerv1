@@ -31,6 +31,8 @@ export type ResultRow = {
   rowNumber: number;
   status: string;
   changes: Change[];
+  originalValues?: string[];
+  changedValues?: string[];
 };
 
 export type JobStatus = {
@@ -93,7 +95,6 @@ export function getSheets(path: string): Promise<{ sheets: string[] }> {
 export function createJob(body: {
   originalPath: string;
   changedPath: string;
-  sheetName: string;
   options: JobOptionsInput;
 }): Promise<{ jobId: string }> {
   return request<{ jobId: string }>("/api/jobs", {

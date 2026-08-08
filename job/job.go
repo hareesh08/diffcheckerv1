@@ -20,16 +20,16 @@ const (
 )
 
 type Options struct {
-	Mode             string // "rows"
-	OriginalSheet    string
-	ChangedSheet     string
-	HeaderRow        int
-	RowKeyColumn     string
-	IgnoreWhitespace bool
-	IgnoreCase       bool
-	HideUnchangedRows    bool
-	HideUnchangedColumns bool
-	PreserveFormatting   bool
+	Mode                 string `json:"mode"`
+	OriginalSheet        string `json:"originalSheet"`
+	ChangedSheet         string `json:"changedSheet"`
+	HeaderRow            int    `json:"headerRow"`
+	RowKeyColumn         string `json:"rowKeyColumn"`
+	IgnoreWhitespace     bool   `json:"ignoreWhitespace"`
+	IgnoreCase           bool   `json:"ignoreCase"`
+	HideUnchangedRows    bool   `json:"hideUnchangedRows"`
+	HideUnchangedColumns bool   `json:"hideUnchangedColumns"`
+	PreserveFormatting   bool   `json:"preserveFormatting"`
 }
 
 type Job struct {
