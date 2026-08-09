@@ -1,13 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 import { listHistory, type HistoryJob } from "@/api";
-import type { UploadedFile } from "@/App";
-import { uploadFile, getSheets, type UploadedFileMeta } from "@/api";
 import {
   FileText,
   Plus,
-  ArrowRight,
-  X,
   Layers,
   Rows3,
   AlignJustify,
@@ -50,45 +45,6 @@ const MODE_META: Record<string, { icon: LucideIcon; label: string }> = {
   rows: { icon: Rows3, label: "Rows" },
 };
 
-type Side = "a" | "b";
-
-const TEXT_EXTS = [
-  "txt",
-  "md",
-  "log",
-  "json",
-  "yaml",
-  "yml",
-  "xml",
-  "html",
-  "css",
-  "js",
-  "ts",
-  "go",
-  "py",
-  "java",
-  "c",
-  "cpp",
-  "h",
-  "sql",
-  "sh",
-  "bat",
-];
-
-function isTextFile(name: string): boolean {
-  const dot = name.lastIndexOf(".");
-  if (dot < 0) return false;
-  return TEXT_EXTS.includes(name.slice(dot + 1).toLowerCase());
-}
-
-function fileBadge(name: string): string {
-  if (!name) return "FILE";
-  const dot = name.lastIndexOf(".");
-  const ext = dot >= 0 ? name.slice(dot + 1).toUpperCase() : "";
-  const short = { XLSX: "XLS", XLSM: "XLS", TSV: "TSV", CSV: "CSV" } as Record<string, string>;
-  return short[ext] || (ext && isTextFile(name) ? "TXT" : ext) || "FILE";
-}
-
 export function HubScreen({
   onNewCompare,
   onOpenJob,
@@ -98,10 +54,6 @@ export function HubScreen({
 }) {
   const [jobs, setJobs] = useState<HistoryJob[]>([]);
   const [loading, setLoading] = useState(true);
-  const [files, setFiles] = useState<{ a?: UploadedFile; b?: UploadedFile }>({});
-  const [busy, setBusy] = useState<{ a?: boolean; b?: boolean }>({});
-  const [error, setError] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<Side | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -119,36 +71,9 @@ export function HubScreen({
     refresh();
   }, [refresh]);
 
-  async function handleFile(file: File, side: Side) {
-    setError(null);
-    if (!file) return;
-    setBusy((b) => ({ ...b, [side]: true }));
-    try {
-      const meta: UploadedFileMeta = await uploadFile(file);
-      const sheets = await getSheets(meta.path);
-      setFiles((f) => ({
-        ...f,
-        [side]: { path: meta.path, name: meta.name, size: meta.size, sheets: sheets.sheets },
-      }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
-    } finally {
-      setBusy((b) => ({ ...b, [side]: false }));
-      setDragOver(null);
-    }
-  }
-
-  const ready = files.a && files.b;
-
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
-        {error && (
-          <div className="mb-4 animate-fade-up rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-foreground">
-            {error}
-          </div>
-        )}
-
         {/* Hero */}
         <div className="mb-8 animate-fade-up">
           <p className="eyebrow mb-3 flex items-center gap-2">
@@ -173,107 +98,8 @@ export function HubScreen({
           </div>
         </div>
 
-        {/* Quick Compare */}
-        <div className="animate-fade-up stagger-2 rounded-xl border border-hairline bg-card p-4 sm:p-6">
-          <p className="eyebrow mb-4">Quick compare</p>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {(["a", "b"] as const).map((side) => (
-              <div
-                key={side}
-                className={cn(
-                  "relative rounded-lg border transition-all",
-                  files[side]
-                    ? "border-emerald-500/30 bg-emerald-500/5"
-                    : "border-dashed border-border bg-surface hover:border-amber-500/40",
-                  dragOver === side && "border-amber-500 bg-amber-500/5",
-                )}
-                onDragOver={(e) => {
-                  e.preventDefault();
-                  setDragOver(side);
-                }}
-                onDragLeave={() => setDragOver(null)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  handleFile(e.dataTransfer.files?.[0] as File, side);
-                }}
-              >
-                {files[side] ? (
-                  <div className="flex items-center gap-3 px-4 py-3">
-                    <div className="grid size-9 shrink-0 place-items-center rounded-md border border-border bg-background font-mono text-[10px] font-bold text-muted-foreground">
-                      {fileBadge(files[side]!.name)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-mono text-xs font-semibold text-foreground">
-                        {files[side]!.name}
-                      </p>
-                      <p className="font-mono text-[10px] text-muted-foreground">
-                        Source {side.toUpperCase()} · {files[side]!.sheets.length} sheet
-                        {files[side]!.sheets.length !== 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setFiles((f) => ({ ...f, [side]: undefined }))}
-                      className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                    >
-                      <X className="size-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="flex h-32 cursor-pointer flex-col items-center justify-center gap-2 sm:h-36">
-                    <input
-                      type="file"
-                      accept=".xlsx,.xlsm,.csv,.tsv,.txt"
-                      className="hidden"
-                      disabled={busy[side]}
-                      onChange={(e) => handleFile(e.target.files?.[0] as File, side)}
-                    />
-                    {busy[side] ? (
-                      <p className="text-xs text-muted-foreground">Uploading...</p>
-                    ) : (
-                      <>
-                        <span className="grid size-9 place-items-center rounded-full border border-border bg-background text-muted-foreground">
-                          <Plus className="size-4" />
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          <span className="font-semibold text-foreground">
-                            Source {side.toUpperCase()}
-                          </span>{" "}
-                          or <span className="underline underline-offset-4">browse</span>
-                        </span>
-                        <span className="font-mono text-[10px] text-muted-foreground/60">
-                          .xlsx · .csv · .tsv · .txt
-                        </span>
-                      </>
-                    )}
-                  </label>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={onNewCompare}
-              className="text-xs font-medium text-muted-foreground hover:text-foreground"
-            >
-              Full comparison options...
-            </button>
-            <button
-              type="button"
-              disabled={!ready}
-              onClick={onNewCompare}
-              className={cn(
-                "flex items-center gap-1.5 rounded-md bg-foreground px-3.5 py-2 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-40",
-              )}
-            >
-              Compare <ArrowRight className="size-3.5" />
-            </button>
-          </div>
-        </div>
-
         {/* Recent */}
-        <div className="mt-10 animate-fade-up stagger-3">
+        <div className="mt-6 animate-fade-up">
           <div className="mb-3 flex items-center justify-between">
             <p className="eyebrow flex items-center gap-2">
               <Clock3 className="size-3" /> Recent comparisons
