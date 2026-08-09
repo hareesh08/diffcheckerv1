@@ -140,45 +140,6 @@ export function HubScreen({
 
   const ready = files.a && files.b;
 
-  const totals = jobs.reduce<{ modified: number; added: number; deleted: number }>(
-    (acc, job) => {
-      const s = parseSummary(job);
-      return {
-        modified: acc.modified + (s.modified ?? 0),
-        added: acc.added + (s.added ?? 0),
-        deleted: acc.deleted + (s.deleted ?? 0),
-      };
-    },
-    { modified: 0, added: 0, deleted: 0 },
-  );
-
-  const stats = [
-    {
-      label: "Modified cells",
-      value: totals.modified.toLocaleString(),
-      tone: "text-amber-600 dark:text-amber-400",
-      dot: "bg-amber-500",
-    },
-    {
-      label: "Lines added",
-      value: totals.added.toLocaleString(),
-      tone: "text-emerald-600 dark:text-emerald-400",
-      dot: "bg-emerald-500",
-    },
-    {
-      label: "Lines removed",
-      value: totals.deleted.toLocaleString(),
-      tone: "text-red-600 dark:text-red-400",
-      dot: "bg-red-500",
-    },
-    {
-      label: "Recent scans",
-      value: String(jobs.length),
-      tone: "text-foreground",
-      dot: "bg-foreground",
-    },
-  ];
-
   return (
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
@@ -210,27 +171,6 @@ export function HubScreen({
               <Plus className="size-3.5" /> New comparison
             </button>
           </div>
-        </div>
-
-        {/* Stats */}
-        <div
-          className="mb-8 grid animate-fade-up grid-cols-2 gap-3 stagger-1 sm:grid-cols-4"
-          aria-hidden={jobs.length === 0}
-        >
-          {stats.map((s) => (
-            <div
-              key={s.label}
-              className="surface-card rounded-xl p-4 transition-colors hover:border-border"
-            >
-              <div className="flex items-center gap-1.5">
-                <span className={cn("size-1.5 rounded-full", s.dot)} />
-                <span className="eyebrow">{s.label}</span>
-              </div>
-              <p className={cn("mt-2 font-mono text-2xl font-bold tracking-tight", s.tone)}>
-                {s.value}
-              </p>
-            </div>
-          ))}
         </div>
 
         {/* Quick Compare */}
