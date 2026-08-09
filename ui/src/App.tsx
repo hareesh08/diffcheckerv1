@@ -36,11 +36,22 @@ export type JobSetup = {
 
 type View = "hub" | "compare" | "history" | "exports" | "settings";
 
+function parseHistorySummary(json: string): Record<string, number> | null {
+  if (!json) return null;
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
   const [view, setView] = useState<View>("hub");
   const [compareStage, setCompareStage] = useState<"setup" | "results">("setup");
   const [setup, setSetup] = useState<JobSetup | null>(null);
   const [historyJobId, setHistoryJobId] = useState<string | null>(null);
+  const [historySummary, setHistorySummary] = useState<Record<string, number> | null>(null);
   const { theme, toggle: toggleTheme } = useTheme();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [docsOpen, setDocsOpen] = useState(false);
@@ -74,8 +85,15 @@ export default function App() {
     return () => document.removeEventListener("contextmenu", prevent);
   }, []);
 
-  function openHistoryJob(id: string, mode: string, originalName = "", changedName = "") {
+  function openHistoryJob(
+    id: string,
+    mode: string,
+    originalName = "",
+    changedName = "",
+    summaryJson = "",
+  ) {
     setHistoryJobId(id);
+    setHistorySummary(parseHistorySummary(summaryJson));
     setSetup({
       fileA: { path: "", name: originalName, size: 0, sheets: [] },
       fileB: { path: "", name: changedName, size: 0, sheets: [] },
@@ -100,6 +118,7 @@ export default function App() {
     setView("compare");
     setCompareStage("setup");
     setHistoryJobId(null);
+    setHistorySummary(null);
     setSetup(null);
   }
 
@@ -211,6 +230,7 @@ export default function App() {
               setup={setup}
               onBack={() => setCompareStage("setup")}
               jobId={historyJobId}
+              historySummary={historySummary}
               onFinished={() => setHistoryJobId(null)}
             />
           )}

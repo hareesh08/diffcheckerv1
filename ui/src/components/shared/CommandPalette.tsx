@@ -31,7 +31,13 @@ export function CommandPalette({
   onOpenChange: (open: boolean) => void;
   onNewCompare: () => void;
   onGotoHistory: () => void;
-  onOpenJob: (id: string, mode: string, originalName: string, changedName: string) => void;
+  onOpenJob: (
+    id: string,
+    mode: string,
+    originalName: string,
+    changedName: string,
+    summary: string,
+  ) => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
 }) {
@@ -86,7 +92,7 @@ export function CommandPalette({
                 <CommandItem
                   key={job.id}
                   onSelect={() => {
-                    onOpenJob(job.id, job.mode, job.originalName, job.changedName);
+                    onOpenJob(job.id, job.mode, job.originalName, job.changedName, job.summary);
                     onOpenChange(false);
                   }}
                 >

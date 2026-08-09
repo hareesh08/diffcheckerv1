@@ -38,11 +38,13 @@ export function ResultsScreen({
   setup,
   onBack,
   jobId: existingJobId,
+  historySummary,
   onFinished,
 }: {
   setup: JobSetup;
   onBack: () => void;
   jobId?: string | null;
+  historySummary?: Record<string, number> | null;
   onFinished?: (jobId: string) => void;
 }) {
   const [jobId, setJobId] = useState<string | null>(existingJobId ?? null);
@@ -86,7 +88,11 @@ export function ResultsScreen({
     if (started.current) return;
     started.current = true;
     if (existingJobId) {
-      setStatus({ id: existingJobId, status: "completed" } as JobStatus);
+      setStatus({
+        id: existingJobId,
+        status: "completed",
+        summary: (historySummary ?? undefined) as JobStatus["summary"],
+      } as JobStatus);
       loadRows(existingJobId, 1, "all", pageSize);
       return;
     }
@@ -133,7 +139,7 @@ export function ResultsScreen({
         setError(e instanceof Error ? e.message : "Failed to start comparison");
       }
     })();
-  }, [setup, loadRows, existingJobId, onFinished, pageSize]);
+  }, [setup, loadRows, existingJobId, onFinished, pageSize, historySummary]);
 
   useEffect(() => {
     if (jobId && status?.status === "completed") {

@@ -50,7 +50,13 @@ export function HubScreen({
   onOpenJob,
 }: {
   onNewCompare: () => void;
-  onOpenJob: (id: string, mode: string, originalName: string, changedName: string) => void;
+  onOpenJob: (
+    id: string,
+    mode: string,
+    originalName: string,
+    changedName: string,
+    summary: string,
+  ) => void;
 }) {
   const [jobs, setJobs] = useState<HistoryJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,7 +142,9 @@ export function HubScreen({
                   <button
                     key={job.id}
                     type="button"
-                    onClick={() => onOpenJob(job.id, job.mode, job.originalName, job.changedName)}
+                    onClick={() =>
+                      onOpenJob(job.id, job.mode, job.originalName, job.changedName, job.summary)
+                    }
                     className="surface-card-hover group flex w-full items-center gap-3 rounded-lg border border-transparent px-3 py-3 text-left transition-colors"
                   >
                     <span className="grid size-9 shrink-0 place-items-center rounded-md bg-accent text-accent-foreground">

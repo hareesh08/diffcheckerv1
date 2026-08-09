@@ -48,7 +48,13 @@ function parseSummary(job: HistoryJob): { modified?: number; added?: number; del
 export function HistoryScreen({
   onOpen,
 }: {
-  onOpen: (jobId: string, mode: string, originalName: string, changedName: string) => void;
+  onOpen: (
+    jobId: string,
+    mode: string,
+    originalName: string,
+    changedName: string,
+    summary: string,
+  ) => void;
 }) {
   const [jobs, setJobs] = useState<HistoryJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,7 +158,10 @@ export function HistoryScreen({
         {loading ? (
           <div className="space-y-2 p-5">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 w-full rounded-lg border border-border bg-card skeleton" />
+              <div
+                key={i}
+                className="h-16 w-full rounded-lg border border-border bg-card skeleton"
+              />
             ))}
           </div>
         ) : groups.length === 0 ? (
@@ -197,7 +206,15 @@ export function HistoryScreen({
                           <>
                             <button
                               type="button"
-                              onClick={() => onOpen(job.id, job.mode, job.originalName, job.changedName)}
+                              onClick={() =>
+                                onOpen(
+                                  job.id,
+                                  job.mode,
+                                  job.originalName,
+                                  job.changedName,
+                                  job.summary,
+                                )
+                              }
                               className="min-w-0 flex-1 text-left"
                             >
                               <p className="truncate text-sm font-semibold text-foreground hover:underline">
@@ -271,7 +288,10 @@ export function HistoryScreen({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground"
+            >
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
