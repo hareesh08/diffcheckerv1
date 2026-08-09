@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,6 +37,16 @@ var dataDir = "./data"
 var centralDB *central.DB
 var httpServer *http.Server
 var enableLogs atomic.Bool
+var logBufferMu sync.Mutex
+var logBuffer []string
+const maxLogEntries = 500
+
+type AppSettings struct {
+	Logs      bool   `json:"logs"`
+	BindMode  string `json:"bindMode"` // "local" | "network"
+}
+var appSettings = AppSettings{Logs: false, BindMode: "local"}
+var settingsMu sync.Mutex
 
 type diffRequest struct {
 	Original string `json:"original"`
@@ -525,20 +536,29 @@ func main() {
 	network := flag.String("network", "", "bind address (e.g. 0.0.0.0 for all interfaces, overrides --local)")
 	logsFlag := flag.Bool("logs", false, "enable verbose request logging")
 	flag.Parse()
-	enableLogs.Store(*logsFlag)
+
+	os.MkdirAll(uploadsDir, 0755)
+	os.MkdirAll(jobsDir, 0755)
+	os.MkdirAll(dataDir, 0755)
+	loadSettings()
+
+	if *logsFlag {
+		enableLogs.Store(true)
+	} else if appSettings.Logs {
+		enableLogs.Store(true)
+	}
 
 	var bindHost string
 	if *network != "" {
 		bindHost = *network
+	} else if appSettings.BindMode == "network" {
+		bindHost = "0.0.0.0"
 	} else if *local {
 		bindHost = "127.0.0.1"
 	} else {
 		bindHost = "0.0.0.0"
 	}
 
-	os.MkdirAll(uploadsDir, 0755)
-	os.MkdirAll(jobsDir, 0755)
-	os.MkdirAll(dataDir, 0755)
 	cDB, err := central.Open(filepath.Join(dataDir, "differ.db"))
 	if err != nil {
 		log.Printf("warning: cannot open central db: %v", err)
@@ -559,6 +579,8 @@ func main() {
 	mux.HandleFunc("/api/exports/", handleExportsDelete)
 	mux.HandleFunc("/api/settings", handleSettingsGet)
 	mux.HandleFunc("/api/settings/logs", handleSettingsLogs)
+	mux.HandleFunc("/api/settings/bind", handleSettingsBindMode)
+	mux.HandleFunc("/api/settings/logs/stream", handleSettingsLogsStream)
 	mux.HandleFunc("/api/shutdown", handleShutdown)
 	mux.HandleFunc("/api/restart", handleRestart)
 	if hasUIBuild() {
@@ -573,7 +595,9 @@ func main() {
 			if enableLogs.Load() {
 				start := time.Now()
 				mux.ServeHTTP(w, r)
-				log.Printf("%s %s %s %s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+				msg := fmt.Sprintf("%s %s %s %s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+				log.Print(msg)
+				appendLog(msg)
 			} else {
 				mux.ServeHTTP(w, r)
 			}
@@ -623,6 +647,32 @@ func openBrowser(url string) {
 	cmd.Start()
 }
 
+func appendLog(msg string) {
+	logBufferMu.Lock()
+	logBuffer = append(logBuffer, msg)
+	if len(logBuffer) > maxLogEntries {
+		logBuffer = logBuffer[len(logBuffer)-maxLogEntries:]
+	}
+	logBufferMu.Unlock()
+}
+
+func loadSettings() {
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
+	b, err := os.ReadFile(filepath.Join(dataDir, "settings.json"))
+	if err != nil {
+		return
+	}
+	_ = json.Unmarshal(b, &appSettings)
+}
+
+func saveSettings() {
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
+	b, _ := json.Marshal(appSettings)
+	_ = os.WriteFile(filepath.Join(dataDir, "settings.json"), b, 0644)
+}
+
 func handleShutdown(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -663,8 +713,10 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	settingsMu.Lock()
+	defer settingsMu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"logs": enableLogs.Load()})
+	json.NewEncoder(w).Encode(appSettings)
 }
 
 func handleSettingsLogs(w http.ResponseWriter, r *http.Request) {
@@ -680,8 +732,86 @@ func handleSettingsLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	enableLogs.Store(body.Enabled)
+	settingsMu.Lock()
+	appSettings.Logs = body.Enabled
+	settingsMu.Unlock()
+	saveSettings()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"logs": body.Enabled})
+}
+
+func handleSettingsBindMode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Mode string `json:"mode"` // "local" | "network"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	if body.Mode != "local" && body.Mode != "network" {
+		http.Error(w, "invalid mode", http.StatusBadRequest)
+		return
+	}
+	settingsMu.Lock()
+	appSettings.BindMode = body.Mode
+	settingsMu.Unlock()
+	saveSettings()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		httpServer.Shutdown(ctx)
+		cmd := exec.Command(os.Args[0], os.Args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Start()
+	}()
+}
+
+func handleSettingsLogsStream(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	var lastIdx int
+	logBufferMu.Lock()
+	lastIdx = len(logBuffer)
+	for _, entry := range logBuffer {
+		fmt.Fprintf(w, "data: %s\n\n", entry)
+	}
+	logBufferMu.Unlock()
+	flusher.Flush()
+
+	ctx := r.Context()
+	ticker := time.NewTicker(300 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			logBufferMu.Lock()
+			if lastIdx < len(logBuffer) {
+				for i := lastIdx; i < len(logBuffer); i++ {
+					fmt.Fprintf(w, "data: %s\n\n", logBuffer[i])
+				}
+				lastIdx = len(logBuffer)
+			}
+			logBufferMu.Unlock()
+			flusher.Flush()
+		}
+	}
 }
 
 func handleJobsSub(w http.ResponseWriter, r *http.Request) {

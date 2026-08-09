@@ -247,8 +247,8 @@ export function openReport(jobId: string, filter: string) {
   );
 }
 
-export async function getSettings(): Promise<{ logs: boolean }> {
-  return request<{ logs: boolean }>("/api/settings");
+export async function getSettings(): Promise<{ logs: boolean; bindMode: string }> {
+  return request<{ logs: boolean; bindMode: string }>("/api/settings");
 }
 
 export async function setSettingsLogs(enabled: boolean): Promise<{ logs: boolean }> {
@@ -257,4 +257,22 @@ export async function setSettingsLogs(enabled: boolean): Promise<{ logs: boolean
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
+}
+
+export async function setSettingsBindMode(mode: "local" | "network"): Promise<{ status: string }> {
+  return request<{ status: string }>("/api/settings/bind", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mode }),
+  });
+}
+
+export function getLogsStream(onLog: (line: string) => void): EventSource {
+  const es = new EventSource("/api/settings/logs/stream");
+  es.onmessage = () => {
+    // @ts-ignore
+    const line = (es as any).data as string;
+    if (line) onLog(line);
+  };
+  return es;
 }
