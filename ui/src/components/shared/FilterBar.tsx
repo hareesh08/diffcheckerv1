@@ -13,9 +13,9 @@ export function FilterBar({
 }) {
   const items: { id: FilterKind; label: string; count: number; color?: string }[] = [
     { id: "all", label: "All", count: counts.total },
-    { id: "modified", label: "Modified", count: counts.modified, color: "bg-neon-yellow" },
-    { id: "added", label: "Added", count: counts.added, color: "bg-neon-green" },
-    { id: "deleted", label: "Deleted", count: counts.deleted, color: "bg-neon-red" },
+    { id: "modified", label: "Modified", count: counts.modified, color: "bg-amber-500" },
+    { id: "added", label: "Added", count: counts.added, color: "bg-emerald-500" },
+    { id: "deleted", label: "Deleted", count: counts.deleted, color: "bg-red-500" },
     { id: "matches", label: "Matches", count: counts.matched },
   ];
 
@@ -29,7 +29,7 @@ export function FilterBar({
           className={cn(
             "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-medium transition-colors",
             active === item.id
-              ? "border-foreground bg-foreground text-background"
+              ? "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300"
               : "border-border text-muted-foreground hover:border-muted-foreground hover:text-foreground",
           )}
         >

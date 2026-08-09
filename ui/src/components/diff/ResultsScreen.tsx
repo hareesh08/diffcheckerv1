@@ -17,16 +17,9 @@ import { FilterBar } from "@/components/shared/FilterBar";
 import { ArrowLeft } from "lucide-react";
 
 const kindColor = {
-  modified: "text-neon-yellow",
-  added: "text-neon-green",
-  deleted: "text-neon-red",
-} as const;
-
-const rowTone = {
-  equal: "hover:bg-card/40",
-  modified: "bg-neon-yellow/5 hover:bg-neon-yellow/10",
-  added: "bg-neon-green/5 hover:bg-neon-green/10",
-  deleted: "bg-neon-red/5 hover:bg-neon-red/10",
+  modified: "text-amber-600 dark:text-amber-400",
+  added: "text-emerald-600 dark:text-emerald-400",
+  deleted: "text-red-600 dark:text-red-400",
 } as const;
 
 function colLetter(n: number) {
@@ -175,7 +168,7 @@ export function ResultsScreen({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center justify-between border-b border-hairline bg-card px-4 py-2">
+      <div className="flex shrink-0 items-center justify-between border-b border-hairline bg-surface-raised px-4 py-2">
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -186,7 +179,7 @@ export function ResultsScreen({
             Back
           </button>
           <div className="h-4 w-px bg-hairline" />
-          <div className="flex rounded border border-border bg-background p-0.5">
+          <div className="flex rounded-md border border-border bg-background p-0.5">
             {(["redline", "original", "changed"] as const).map((v) => (
               <button
                 key={v}
@@ -204,20 +197,20 @@ export function ResultsScreen({
             ))}
           </div>
           <div className="h-4 w-px bg-hairline" />
-          <span className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+          <span className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
             {setup.fileA.name}
           </span>
           <span className="text-[10px] text-muted-foreground">vs</span>
-          <span className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+          <span className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
             {setup.fileB.name}
           </span>
         </div>
         {done && (
           <div className="flex items-center gap-2">
             {[
-              { c: "bg-neon-yellow", n: summary.modifiedRows ?? 0, l: "Mod" },
-              { c: "bg-neon-green", n: summary.addedRows ?? 0, l: "Add" },
-              { c: "bg-neon-red", n: summary.deletedRows ?? 0, l: "Del" },
+              { c: "bg-amber-500", n: summary.modifiedRows ?? 0, l: "Mod" },
+              { c: "bg-emerald-500", n: summary.addedRows ?? 0, l: "Add" },
+              { c: "bg-red-500", n: summary.deletedRows ?? 0, l: "Del" },
             ].map((s) => (
               <span
                 key={s.l}
@@ -230,7 +223,7 @@ export function ResultsScreen({
             <div className="h-4 w-px bg-hairline" />
             <button
               onClick={() => setExportOpen(true)}
-              className="rounded bg-foreground px-2.5 py-1 text-[10px] font-semibold text-background"
+              className="rounded-md bg-foreground px-2.5 py-1 text-[10px] font-semibold text-background"
             >
               Export
             </button>
@@ -259,7 +252,7 @@ export function ResultsScreen({
 
       {/* Error */}
       {error && (
-        <div className="border-b border-hairline bg-neon-red/5 px-4 py-2 text-xs text-foreground">
+        <div className="border-b border-hairline bg-destructive/5 px-4 py-2 text-xs text-foreground">
           {error}
         </div>
       )}
@@ -267,7 +260,7 @@ export function ResultsScreen({
       {/* Running state */}
       {!done ? (
         <div className="flex flex-1 items-center justify-center bg-background p-8">
-          <div className="w-full max-w-md rounded-md border border-border bg-card p-6 text-center">
+          <div className="w-full max-w-md rounded-lg border border-border bg-card p-6 text-center">
             <p className="mb-2 text-sm font-semibold">
               {status?.status === "failed"
                 ? "Comparison failed"
@@ -282,27 +275,27 @@ export function ResultsScreen({
                 </p>
                 <div className="h-2 w-full overflow-hidden rounded bg-border">
                   <div
-                    className="h-full bg-primary transition-all"
+                    className="h-full bg-amber-500 transition-all"
                     style={{ width: `${Math.round((status?.progress ?? 0) * 100)}%` }}
                   />
                 </div>
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="mt-3 rounded border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  className="mt-3 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground"
                 >
                   Cancel
                 </button>
               </>
             )}
             {status?.status === "failed" && (
-              <p className="mt-2 text-xs text-neon-red">{status.error || "Unknown error"}</p>
+              <p className="mt-2 text-xs text-destructive">{status.error || "Unknown error"}</p>
             )}
             {(status?.status === "failed" || status?.status === "cancelled") && (
               <button
                 type="button"
                 onClick={onBack}
-                className="mt-3 w-full rounded bg-foreground px-3 py-2 text-xs font-semibold text-background"
+                className="mt-3 w-full rounded-md bg-foreground px-3 py-2 text-xs font-semibold text-background"
               >
                 Back
               </button>
@@ -312,7 +305,7 @@ export function ResultsScreen({
       ) : (
         /* Table */
         <div className="flex-1 overflow-y-auto bg-background">
-          <table className="min-w-full border-separate border-spacing-0 font-mono text-[12px] leading-none">
+          <table className="min-w-full border-separate border-spacing-0 data-cell">
             <thead className="sticky top-0 z-20">
               <tr>
                 <th className="w-20 border-r border-b border-hairline bg-secondary py-2 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -344,7 +337,7 @@ export function ResultsScreen({
                   </td>
                 </tr>
               )}
-              {rows.map((row) => {
+              {rows.map((row, idx) => {
                 const rowKey = String(row.rowNumber);
                 const isExpanded = expandedRow === row.rowNumber;
                 return (
@@ -357,19 +350,21 @@ export function ResultsScreen({
                       }}
                       onClick={() => setExpandedRow(isExpanded ? null : row.rowNumber)}
                       className={cn(
-                        "cursor-pointer transition-colors",
-                        rowTone[row.status as keyof typeof rowTone] ?? "hover:bg-card/40",
-                        isExpanded && "ring-1 ring-inset ring-ring",
+                        "cursor-pointer transition-colors table-row-zebra",
+                        row.status === "modified" && "bg-amber-500/5 hover:bg-amber-500/10",
+                        row.status === "added" && "bg-emerald-500/5 hover:bg-emerald-500/10",
+                        row.status === "deleted" && "bg-red-500/5 hover:bg-red-500/10",
+                        isExpanded && "ring-1 ring-inset ring-amber-500/30",
                       )}
                     >
-                      <td className="sticky left-0 z-10 border-r border-b border-hairline bg-secondary px-2 py-2 text-center text-[10px] text-muted-foreground">
+                      <td className="sticky left-0 z-10 border-r border-b border-hairline bg-inherit px-2 py-2 text-center text-[10px] text-muted-foreground">
                         {row.rowNumber}
                         <span
                           className={cn(
                             "ml-2 inline-block h-1.5 w-1.5 rounded-full align-middle",
-                            row.status === "modified" && "bg-neon-yellow",
-                            row.status === "added" && "bg-neon-green",
-                            row.status === "deleted" && "bg-neon-red",
+                            row.status === "modified" && "bg-amber-500",
+                            row.status === "added" && "bg-emerald-500",
+                            row.status === "deleted" && "bg-red-500",
                           )}
                         />
                       </td>
@@ -396,9 +391,9 @@ export function ResultsScreen({
                             key={c}
                             className={cn(
                               "border-r border-b border-hairline px-3 py-2",
-                              hasChange && view === "redline" && "bg-neon-yellow/10",
-                              hasChange && view === "original" && "bg-neon-red/10",
-                              hasChange && view === "changed" && "bg-neon-green/10",
+                              hasChange && view === "redline" && "bg-amber-500/10",
+                              hasChange && view === "original" && "bg-red-500/10",
+                              hasChange && view === "changed" && "bg-emerald-500/10",
                             )}
                           >
                             {hasChange ? (
@@ -407,9 +402,11 @@ export function ResultsScreen({
                                   className={cn(
                                     "rounded px-0.5",
                                     change!.type === "modified" &&
-                                      "bg-neon-yellow/20 text-neon-yellow",
-                                    change!.type === "added" && "bg-neon-green/20 text-neon-green",
-                                    change!.type === "deleted" && "bg-neon-red/20 text-neon-red",
+                                      "bg-amber-500/20 text-amber-600 dark:text-amber-400",
+                                    change!.type === "added" &&
+                                      "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400",
+                                    change!.type === "deleted" &&
+                                      "bg-red-500/20 text-red-600 dark:text-red-400",
                                     view === "redline" && "font-semibold",
                                     view === "original" && "text-muted-foreground",
                                     kindColor[change!.type as keyof typeof kindColor] ?? "",
@@ -515,7 +512,7 @@ export function ResultsScreen({
                   setPageSize(Number(e.target.value));
                   setPage(1);
                 }}
-                className="rounded border border-border bg-card px-1 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-ring"
+                className="rounded-md border border-border bg-card px-1 py-0.5 text-[10px] outline-none focus:ring-1 focus:ring-amber-500/40"
               >
                 {[25, 50, 100, 250].map((n) => (
                   <option key={n} value={n}>
@@ -528,7 +525,7 @@ export function ResultsScreen({
             <button
               disabled={page <= 1}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="rounded border border-border px-1.5 py-0.5 hover:text-foreground disabled:opacity-40"
+              className="rounded-md border border-border px-1.5 py-0.5 hover:text-foreground disabled:opacity-40"
             >
               Prev
             </button>
@@ -538,7 +535,7 @@ export function ResultsScreen({
             <button
               disabled={page * pageSize >= totalRows}
               onClick={() => setPage((p) => p + 1)}
-              className="rounded border border-border px-1.5 py-0.5 hover:text-foreground disabled:opacity-40"
+              className="rounded-md border border-border px-1.5 py-0.5 hover:text-foreground disabled:opacity-40"
             >
               Next
             </button>

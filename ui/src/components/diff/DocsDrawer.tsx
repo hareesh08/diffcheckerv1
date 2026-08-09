@@ -17,14 +17,15 @@ const sections = [
           <strong>.csv</strong>, <strong>.tsv</strong>, or <strong>.txt</strong>.
         </li>
         <li>
-          On the Configure step, pick a sheet per file and choose a match mode.
+          Choose a sheet per file (if multi-sheet) and a match mode: Table or
+          Rows.
         </li>
         <li>
           Run the comparison — the engine streams both files row by row and
           stores results in SQLite.
         </li>
         <li>
-          Review changes, filter rows, and export as CSV or JSONL.
+          Review changes, filter rows, and export as CSV, JSONL, XLSX, or PDF.
         </li>
       </ol>
     ),
@@ -136,7 +137,15 @@ const sections = [
             <code className="rounded bg-accent px-1 py-0.5">
               POST /api/jobs/{"{id}"}/export
             </code>{" "}
-            — export CSV or JSONL
+            — export CSV, JSONL, XLSX, or PDF
+          </li>
+          <li>
+            <code className="rounded bg-accent px-1 py-0.5">GET /api/history</code>{" "}
+            — list comparison history
+          </li>
+          <li>
+            <code className="rounded bg-accent px-1 py-0.5">GET /api/exports</code>{" "}
+            — list export history
           </li>
         </ul>
       </div>
@@ -168,12 +177,12 @@ export function DocsDrawer({
           <DrawerTitle className="text-sm">Documentation</DrawerTitle>
         </DrawerHeader>
         <div className="overflow-y-auto px-4 pb-4">
-          <div className="mb-4 flex items-center gap-3 rounded-md border border-hairline bg-surface p-3">
-            <img
-              src="/logo.svg"
-              alt="Differ Pro"
-              className="size-8 shrink-0 rounded"
-            />
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-hairline bg-surface p-3">
+            <div className="grid size-8 shrink-0 place-items-center rounded-md bg-foreground text-background">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="size-4">
+                <path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
             <div>
               <p className="text-xs font-semibold">Differ Pro</p>
               <p className="text-[10px] text-muted-foreground">
@@ -187,7 +196,7 @@ export function DocsDrawer({
                 <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {s.title}
                 </h3>
-                <div className="rounded-md border border-border bg-surface p-3 text-[11px] leading-relaxed">
+                <div className="rounded-lg border border-border bg-surface p-3 text-[11px] leading-relaxed">
                   {s.body}
                 </div>
               </section>

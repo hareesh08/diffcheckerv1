@@ -104,7 +104,7 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="border-b border-hairline bg-card px-5 py-4">
+      <div className="border-b border-hairline bg-surface-raised px-5 py-4">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-[-0.04em]">Comparison history</h1>
@@ -116,20 +116,24 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search comparisons..."
-            className="w-56 rounded border border-border bg-background px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+            className="w-56 rounded-md border border-border bg-background px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
           />
         </div>
       </div>
 
       {error && (
-        <div className="border-b border-hairline bg-neon-red/5 px-5 py-2 text-xs text-foreground">
+        <div className="border-b border-hairline bg-destructive/5 px-5 py-2 text-xs text-foreground">
           {error}
         </div>
       )}
 
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">Loading...</p>
+          <div className="space-y-2 p-5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 w-full rounded-lg border border-border bg-card skeleton" />
+            ))}
+          </div>
         ) : groups.length === 0 ? (
           <EmptyState
             icon={FileText}
@@ -137,17 +141,17 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
             subtitle="Run a comparison and it will be saved here."
           />
         ) : (
-          <div className="mx-auto max-w-4xl space-y-8 px-5 py-6">
-            {groups.map((g) => (
-              <div key={g.label}>
-                <p className="eyebrow mb-2">{g.label}</p>
-                <div className="space-y-2">
+          <div className="mx-auto max-w-4xl px-5 py-6">
+            {groups.map((g, gi) => (
+              <div key={g.label} className={cn("mb-8", gi > 0 && "animate-fade-up")}>
+                <p className="eyebrow mb-3">{g.label}</p>
+                <div className="space-y-1.5">
                   {g.items.map((job) => {
                     const s = parseSummary(job);
                     return (
                       <div
                         key={job.id}
-                        className="flex items-center gap-3 rounded border border-border bg-card px-3 py-2.5"
+                        className="surface-card-hover flex items-center gap-3 rounded-lg px-3 py-2.5"
                       >
                         {renamingId === job.id ? (
                           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -159,7 +163,7 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
                                 if (e.key === "Enter") handleRename(job);
                                 if (e.key === "Escape") setRenamingId(null);
                               }}
-                              className="min-w-0 flex-1 rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
+                              className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
                             />
                             <Button size="sm" onClick={() => handleRename(job)}>
                               Save
@@ -185,19 +189,13 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
 
                             <div className="flex shrink-0 items-center gap-1.5">
                               {(s.modified ?? 0) > 0 && (
-                                <span className="flex items-center gap-1 rounded bg-neon-yellow/10 px-1.5 py-0.5 text-[10px] font-mono text-neon-yellow">
-                                  {s.modified} mod
-                                </span>
+                                <span className="diff-badge diff-badge-mod">{s.modified} mod</span>
                               )}
                               {(s.added ?? 0) > 0 && (
-                                <span className="flex items-center gap-1 rounded bg-neon-green/10 px-1.5 py-0.5 text-[10px] font-mono text-neon-green">
-                                  {s.added} add
-                                </span>
+                                <span className="diff-badge diff-badge-add">{s.added} add</span>
                               )}
                               {(s.deleted ?? 0) > 0 && (
-                                <span className="flex items-center gap-1 rounded bg-neon-red/10 px-1.5 py-0.5 text-[10px] font-mono text-neon-red">
-                                  {s.deleted} del
-                                </span>
+                                <span className="diff-badge diff-badge-del">{s.deleted} del</span>
                               )}
                             </div>
 

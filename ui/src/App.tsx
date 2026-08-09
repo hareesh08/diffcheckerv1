@@ -69,6 +69,7 @@ export default function App() {
     setView("compare");
     setCompareStage("setup");
     setHistoryJobId(null);
+    setSetup(null);
   }
 
   const modKey = navigator.platform?.includes("Mac") ? "⌘" : "Ctrl";
@@ -82,11 +83,15 @@ export default function App() {
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
       {/* Header */}
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-hairline bg-surface/80 px-4 backdrop-blur-xl">
-        <div className="flex items-center gap-2">
-          <img src="/logo.svg" alt="Differ Pro" className="size-5 shrink-0 rounded" />
-          <span className="text-sm font-bold tracking-[-0.03em]">
-            Differ <span className="text-primary">Pro</span>
+      <header className="flex h-11 shrink-0 items-center justify-between border-b border-hairline bg-surface-raised/80 px-4 backdrop-blur-xl">
+        <div className="flex items-center gap-2.5">
+          <div className="grid size-6 shrink-0 place-items-center rounded-md bg-foreground text-background">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="size-3.5">
+              <path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <span className="text-sm font-semibold tracking-[-0.02em]">
+            Differ <span className="text-amber-500 dark:text-amber-400">Pro</span>
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -114,7 +119,7 @@ export default function App() {
             <BookOpen className="size-3.5" />
           </button>
           <div className="h-4 w-px bg-hairline mx-0.5" />
-          <div className="grid size-7 place-items-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+          <div className="grid size-7 place-items-center rounded-full bg-amber-500/10 text-[10px] font-bold text-amber-600 dark:text-amber-400">
             H
           </div>
         </div>
@@ -122,7 +127,7 @@ export default function App() {
 
       <div className="flex min-h-0 flex-1">
         {/* Sidebar */}
-        <nav className="flex w-48 shrink-0 flex-col border-r border-hairline bg-card">
+        <nav className="flex w-48 shrink-0 flex-col border-r border-hairline bg-surface">
           <div className="flex-1 p-2">
             {NAV.map((item) => (
               <button
@@ -133,10 +138,10 @@ export default function App() {
                   else setView(item.id);
                 }}
                 className={cn(
-                  "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                  "sidebar-item w-full",
                   view === item.id && compareStage === "setup"
-                    ? "bg-accent font-semibold text-foreground"
-                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                    ? "[aria-current='page']"
+                    : "",
                 )}
               >
                 <item.icon className="size-4 shrink-0" />
@@ -148,7 +153,7 @@ export default function App() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+              className="sidebar-item w-full"
             >
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
               {theme === "dark" ? "Light mode" : "Dark mode"}

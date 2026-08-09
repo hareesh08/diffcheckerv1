@@ -5,10 +5,10 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { Download, X } from "lucide-react";
 
 const formatColor: Record<string, string> = {
-  csv: "bg-neon-green/10 text-neon-green",
-  jsonl: "bg-neon-blue/10 text-neon-blue",
-  xlsx: "bg-neon-green/10 text-neon-green",
-  pdf: "bg-neon-red/10 text-neon-red",
+  csv: "diff-badge-add",
+  jsonl: "diff-badge-mod",
+  xlsx: "diff-badge-add",
+  pdf: "diff-badge-del",
 };
 
 function fmtDate(iso: string): string {
@@ -55,7 +55,7 @@ export function ExportsScreen() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="border-b border-hairline bg-card px-5 py-4">
+      <div className="border-b border-hairline bg-surface-raised px-5 py-4">
         <h1 className="text-2xl font-bold tracking-[-0.04em]">Exported files</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Every file you exported from a comparison, with its custom name.
@@ -63,14 +63,18 @@ export function ExportsScreen() {
       </div>
 
       {error && (
-        <div className="border-b border-hairline bg-neon-red/5 px-5 py-2 text-xs text-foreground">
+        <div className="border-b border-hairline bg-destructive/5 px-5 py-2 text-xs text-foreground">
           {error}
         </div>
       )}
 
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">Loading...</p>
+          <div className="space-y-2 p-5">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-14 w-full rounded-lg border border-border bg-card skeleton" />
+            ))}
+          </div>
         ) : exports.length === 0 ? (
           <EmptyState
             icon={Download}
@@ -79,15 +83,15 @@ export function ExportsScreen() {
           />
         ) : (
           <div className="mx-auto max-w-3xl px-5 py-6">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {exports.map((e) => (
                 <div
                   key={e.id}
-                  className="flex items-center gap-3 rounded border border-border bg-card px-3 py-2.5"
+                  className="surface-card-hover flex items-center gap-3 rounded-lg px-3 py-2.5"
                 >
                   <span
                     className={cn(
-                      "shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase",
+                      "shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase",
                       formatColor[e.format] ?? "bg-neutral-500/10 text-neutral-500",
                     )}
                   >

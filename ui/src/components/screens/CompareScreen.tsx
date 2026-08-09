@@ -22,6 +22,7 @@ export function CompareScreen({
   });
   const [busy, setBusy] = useState<{ a?: boolean; b?: boolean }>({});
   const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<Side | null>(null);
   const [sheetA, setSheetA] = useState(initialSetup?.sheetA ?? "");
   const [sheetB, setSheetB] = useState(initialSetup?.sheetB ?? "");
   const [mode, setMode] = useState<"table" | "rows">(initialSetup?.options.mode ?? "table");
@@ -50,6 +51,7 @@ export function CompareScreen({
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy((b) => ({ ...b, [side]: false }));
+      setDragOver(null);
     }
   }
 
@@ -68,29 +70,39 @@ export function CompareScreen({
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
         {error && (
-          <div className="mb-4 rounded border border-neon-red/30 bg-neon-red/5 px-3 py-2 text-xs text-foreground">
+          <div className="mb-4 animate-fade-up rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-foreground">
             {error}
           </div>
         )}
 
-        <div className="mb-6">
+        <div className="mb-6 animate-fade-up">
           <h1 className="text-3xl font-bold tracking-[-0.045em] sm:text-4xl">New comparison</h1>
           <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">
-            Drop two files below, then run the comparison.
+            Drop two files below, configure options, then run.
           </p>
         </div>
 
         {/* Drop zones */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="animate-fade-up stagger-1 grid grid-cols-1 gap-4 sm:grid-cols-2">
           {(["a", "b"] as const).map((side) => (
             <div
               key={side}
               className={cn(
-                "flex flex-col rounded-lg border transition-all",
+                "relative rounded-xl border transition-all",
                 files[side]
-                  ? "border-neon-green/30 bg-neon-green/5"
-                  : "border-dashed border-border bg-card hover:border-neon-blue/60",
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : "border-dashed border-border bg-surface hover:border-amber-500/40",
+                dragOver === side && "border-amber-500 bg-amber-500/5",
               )}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(side);
+              }}
+              onDragLeave={() => setDragOver(null)}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleFile(e.dataTransfer.files?.[0] as File, side);
+              }}
             >
               {files[side] ? (
                 <div className="flex items-center gap-3 px-4 py-3">
@@ -109,13 +121,13 @@ export function CompareScreen({
                   <button
                     type="button"
                     onClick={() => setFiles((f) => ({ ...f, [side]: undefined }))}
-                    className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+                    className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                   >
                     <X className="size-3" />
                   </button>
                 </div>
               ) : (
-                <label className="flex h-32 cursor-pointer flex-col items-center justify-center gap-2 sm:h-40">
+                <label className="flex h-32 cursor-pointer flex-col items-center justify-center gap-2 sm:h-36">
                   <input
                     type="file"
                     accept=".xlsx,.xlsm,.csv,.tsv,.txt"
@@ -148,7 +160,7 @@ export function CompareScreen({
 
         {/* Options — progressive disclosure */}
         {ready && (
-          <div className="mt-6 space-y-4 rounded-lg border border-border bg-card p-4 sm:p-5">
+          <div className="animate-fade-up stagger-2 mt-6 space-y-4 rounded-xl border border-hairline bg-card p-4 sm:p-5">
             <p className="eyebrow mb-2">Options</p>
 
             {/* Sheet selectors */}
@@ -164,7 +176,7 @@ export function CompareScreen({
                       onChange={(e) =>
                         side === "a" ? setSheetA(e.target.value) : setSheetB(e.target.value)
                       }
-                      className="w-full rounded border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+                      className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
                     >
                       {files[side]!.sheets.map((s) => (
                         <option key={s} value={s}>
@@ -198,16 +210,16 @@ export function CompareScreen({
                   className={cn(
                     "flex gap-3 rounded-lg border p-3 text-left transition-all",
                     mode === m.id
-                      ? "border-foreground bg-foreground/5"
+                      ? "border-amber-500/50 bg-amber-500/5"
                       : "border-border hover:border-muted-foreground",
                   )}
                 >
                   <div
                     className={cn(
-                      "mt-0.5 size-3 shrink-0 rounded-full",
+                      "mt-0.5 size-3 shrink-0 rounded-full border-2 transition-colors",
                       mode === m.id
-                        ? "border-4 border-foreground"
-                        : "border border-muted-foreground",
+                        ? "border-amber-500 bg-amber-500"
+                        : "border-muted-foreground",
                     )}
                   />
                   <div>
@@ -235,7 +247,7 @@ export function CompareScreen({
                   <span
                     className={cn(
                       "relative h-4 w-7 rounded-full transition-colors",
-                      t.on ? "bg-foreground" : "bg-border",
+                      t.on ? "bg-amber-500" : "bg-border",
                     )}
                   >
                     <span
@@ -257,7 +269,7 @@ export function CompareScreen({
                   min={0}
                   value={headerRow}
                   onChange={(e) => setHeaderRow(Number(e.target.value))}
-                  className="w-14 rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-ring"
+                  className="w-14 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
                 />
               </div>
             </div>
@@ -265,12 +277,14 @@ export function CompareScreen({
         )}
 
         {/* Run button */}
-        <div className="mt-6 flex justify-end">
+        <div className="animate-fade-up stagger-3 mt-6 flex justify-end">
           <button
             type="button"
             disabled={!ready}
             onClick={handleRun}
-            className="flex items-center gap-2 rounded bg-neon-green px-4 py-2.5 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+            className={cn(
+              "flex items-center gap-2 rounded-md bg-amber-500 px-4 py-2.5 text-xs font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-40",
+            )}
           >
             Run comparison <ArrowRight className="size-3.5" />
           </button>

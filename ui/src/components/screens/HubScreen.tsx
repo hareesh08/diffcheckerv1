@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { listHistory, type HistoryJob } from "@/api";
 import type { UploadedFile } from "@/App";
 import { uploadFile, getSheets, type UploadedFileMeta } from "@/api";
-import { FileText, Plus, ArrowRight } from "lucide-react";
+import { FileText, Plus, ArrowRight, X } from "lucide-react";
 import { EmptyState } from "@/components/shared/EmptyState";
 
 function fmtDate(iso: string): string {
@@ -47,6 +47,7 @@ export function HubScreen({
   const [files, setFiles] = useState<{ a?: UploadedFile; b?: UploadedFile }>({});
   const [busy, setBusy] = useState<{ a?: boolean; b?: boolean }>({});
   const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState<Side | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -79,6 +80,7 @@ export function HubScreen({
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
       setBusy((b) => ({ ...b, [side]: false }));
+      setDragOver(null);
     }
   }
 
@@ -88,12 +90,12 @@ export function HubScreen({
     <div className="flex-1 overflow-auto">
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-12">
         {error && (
-          <div className="mb-4 rounded border border-neon-red/30 bg-neon-red/5 px-3 py-2 text-xs text-foreground">
+          <div className="mb-4 animate-fade-up rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-foreground">
             {error}
           </div>
         )}
 
-        <div className="mb-8">
+        <div className="mb-8 animate-fade-up">
           <h1 className="text-3xl font-bold tracking-[-0.045em] sm:text-4xl">
             Compare with confidence.
           </h1>
@@ -103,42 +105,53 @@ export function HubScreen({
         </div>
 
         {/* Quick Compare */}
-        <div className="rounded-lg border border-border bg-card p-4 sm:p-6">
-          <p className="eyebrow mb-3">Quick compare</p>
+        <div className="animate-fade-up stagger-1 rounded-xl border border-hairline bg-card p-4 sm:p-6">
+          <p className="eyebrow mb-4">Quick compare</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {(["a", "b"] as const).map((side) => (
               <div
                 key={side}
                 className={cn(
-                  "flex h-32 flex-col items-center justify-center gap-2 rounded-lg border border-dashed bg-background transition-all sm:h-40",
+                  "relative rounded-lg border transition-all",
                   files[side]
-                    ? "border-neon-green/40 bg-neon-green/5"
-                    : "border-border hover:border-neon-blue/60",
+                    ? "border-emerald-500/30 bg-emerald-500/5"
+                    : "border-dashed border-border bg-surface hover:border-amber-500/40",
+                  dragOver === side && "border-amber-500 bg-amber-500/5",
                 )}
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(side);
+                }}
+                onDragLeave={() => setDragOver(null)}
                 onDrop={(e) => {
                   e.preventDefault();
                   handleFile(e.dataTransfer.files?.[0] as File, side);
                 }}
               >
                 {files[side] ? (
-                  <div className="flex flex-col items-center gap-1 text-center">
-                    <span className="truncate max-w-[180px] font-mono text-xs font-semibold text-foreground">
-                      {files[side]!.name}
-                    </span>
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      Source {side.toUpperCase()}
-                    </span>
+                  <div className="flex items-center gap-3 px-4 py-3">
+                    <div className="grid size-8 shrink-0 place-items-center rounded border border-border bg-background font-mono text-[10px] font-bold text-muted-foreground">
+                      XLS
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-mono text-xs font-semibold text-foreground">
+                        {files[side]!.name}
+                      </p>
+                      <p className="font-mono text-[10px] text-muted-foreground">
+                        Source {side.toUpperCase()} · {files[side]!.sheets.length} sheet
+                        {files[side]!.sheets.length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setFiles((f) => ({ ...f, [side]: undefined }))}
-                      className="mt-1 text-[10px] text-muted-foreground underline hover:text-foreground"
+                      className="grid size-6 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                     >
-                      remove
+                      <X className="size-3" />
                     </button>
                   </div>
                 ) : (
-                  <label className="flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1">
+                  <label className="flex h-32 cursor-pointer flex-col items-center justify-center gap-2 sm:h-36">
                     <input
                       type="file"
                       accept=".xlsx,.xlsm,.csv,.tsv,.txt"
@@ -150,13 +163,16 @@ export function HubScreen({
                       <p className="text-xs text-muted-foreground">Uploading...</p>
                     ) : (
                       <>
-                        <Plus className="size-4 text-muted-foreground" />
+                        <Plus className="size-5 text-muted-foreground" />
                         <span className="text-xs text-muted-foreground">
                           Drop{" "}
                           <span className="font-semibold text-foreground">
                             Source {side.toUpperCase()}
                           </span>{" "}
                           or <span className="underline underline-offset-4">browse</span>
+                        </span>
+                        <span className="font-mono text-[10px] text-muted-foreground/60">
+                          .xlsx .xlsm .csv .tsv .txt
                         </span>
                       </>
                     )}
@@ -178,7 +194,7 @@ export function HubScreen({
               disabled={!ready}
               onClick={onNewCompare}
               className={cn(
-                "flex items-center gap-1.5 rounded bg-foreground px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-40",
+                "flex items-center gap-1.5 rounded-md bg-foreground px-3 py-1.5 text-xs font-semibold text-background transition-opacity hover:opacity-90 disabled:opacity-40",
               )}
             >
               Compare <ArrowRight className="size-3" />
@@ -187,10 +203,14 @@ export function HubScreen({
         </div>
 
         {/* Recent */}
-        <div className="mt-10">
+        <div className="mt-10 animate-fade-up stagger-2">
           <p className="eyebrow mb-3">Recent comparisons</p>
           {loading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Loading...</p>
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-14 w-full rounded-lg border border-border bg-card skeleton" />
+              ))}
+            </div>
           ) : jobs.length === 0 ? (
             <EmptyState
               icon={FileText}
@@ -199,7 +219,7 @@ export function HubScreen({
               action={{ label: "Start comparing", onClick: onNewCompare }}
             />
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {jobs.map((job) => {
                 const s = parseSummary(job);
                 return (
@@ -207,7 +227,7 @@ export function HubScreen({
                     key={job.id}
                     type="button"
                     onClick={() => onOpenJob(job.id)}
-                    className="flex w-full items-center gap-3 rounded border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-muted-foreground"
+                    className="surface-card-hover flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
                   >
                     <FileText className="size-4 shrink-0 text-muted-foreground" />
                     <div className="min-w-0 flex-1">
@@ -220,19 +240,13 @@ export function HubScreen({
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                       {(s.modified ?? 0) > 0 && (
-                        <span className="rounded bg-neon-yellow/10 px-1.5 py-0.5 font-mono text-[10px] text-neon-yellow">
-                          {s.modified} mod
-                        </span>
+                        <span className="diff-badge diff-badge-mod">{s.modified} mod</span>
                       )}
                       {(s.added ?? 0) > 0 && (
-                        <span className="rounded bg-neon-green/10 px-1.5 py-0.5 font-mono text-[10px] text-neon-green">
-                          {s.added} add
-                        </span>
+                        <span className="diff-badge diff-badge-add">{s.added} add</span>
                       )}
                       {(s.deleted ?? 0) > 0 && (
-                        <span className="rounded bg-neon-red/10 px-1.5 py-0.5 font-mono text-[10px] text-neon-red">
-                          {s.deleted} del
-                        </span>
+                        <span className="diff-badge diff-badge-del">{s.deleted} del</span>
                       )}
                     </div>
                     <span className="shrink-0 text-[10px] text-muted-foreground">

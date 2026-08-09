@@ -104,7 +104,7 @@ export function ExportDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="my-comparison"
-              className="w-full rounded border border-border bg-card px-2.5 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 font-mono text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
             />
             <p className="mt-1 font-mono text-[10px] text-muted-foreground">
               {slugify(name) || "diff"}
@@ -123,9 +123,9 @@ export function ExportDialog({
                   type="button"
                   onClick={() => setFormat(f.id)}
                   className={cn(
-                    "rounded border px-2 py-2 text-center transition-colors",
+                    "rounded-md border px-2 py-2 text-center transition-colors",
                     format === f.id
-                      ? "border-foreground bg-foreground text-background"
+                      ? "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300"
                       : "border-border text-muted-foreground hover:border-muted-foreground",
                   )}
                 >
@@ -133,7 +133,7 @@ export function ExportDialog({
                   <span
                     className={cn(
                       "mt-0.5 block text-[9px] leading-tight",
-                      format === f.id ? "text-background/70" : "text-muted-foreground/70",
+                      format === f.id ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/70",
                     )}
                   >
                     {f.desc}
@@ -150,7 +150,7 @@ export function ExportDialog({
             <select
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              className="w-full rounded border border-border bg-card px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
             >
               {FILTERS.map((f) => (
                 <option key={f.value} value={f.value}>
@@ -160,7 +160,7 @@ export function ExportDialog({
             </select>
           </div>
 
-          {error && <p className="text-xs text-neon-red">{error}</p>}
+          {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
 
         <DialogFooter>
