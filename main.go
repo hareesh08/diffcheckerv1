@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"diffchecker/central"
@@ -34,7 +35,7 @@ var jobsDir = "./jobs"
 var dataDir = "./data"
 var centralDB *central.DB
 var httpServer *http.Server
-var enableLogs bool
+var enableLogs atomic.Bool
 
 type diffRequest struct {
 	Original string `json:"original"`
@@ -524,7 +525,7 @@ func main() {
 	network := flag.String("network", "", "bind address (e.g. 0.0.0.0 for all interfaces, overrides --local)")
 	logsFlag := flag.Bool("logs", false, "enable verbose request logging")
 	flag.Parse()
-	enableLogs = *logsFlag
+	enableLogs.Store(*logsFlag)
 
 	var bindHost string
 	if *network != "" {
@@ -556,6 +557,8 @@ func main() {
 	mux.HandleFunc("/api/history/", handleHistorySub)
 	mux.HandleFunc("/api/exports", handleExportsList)
 	mux.HandleFunc("/api/exports/", handleExportsDelete)
+	mux.HandleFunc("/api/settings", handleSettingsGet)
+	mux.HandleFunc("/api/settings/logs", handleSettingsLogs)
 	mux.HandleFunc("/api/shutdown", handleShutdown)
 	mux.HandleFunc("/api/restart", handleRestart)
 	if hasUIBuild() {
@@ -565,12 +568,16 @@ func main() {
 	}
 
 	httpServer = &http.Server{
-		Addr:    bindHost + ":8080",
-		Handler: mux,
-	}
-
-	if enableLogs {
-		httpServer.Handler = logMiddleware(mux)
+		Addr: bindHost + ":8080",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if enableLogs.Load() {
+				start := time.Now()
+				mux.ServeHTTP(w, r)
+				log.Printf("%s %s %s %s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
+			} else {
+				mux.ServeHTTP(w, r)
+			}
+		}),
 	}
 
 	log.Printf("Listening on http://%s:8080", bindHost)
@@ -616,14 +623,6 @@ func openBrowser(url string) {
 	cmd.Start()
 }
 
-func logMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		next.ServeHTTP(w, r)
-		log.Printf("%s %s %s %s", r.Method, r.URL.Path, r.RemoteAddr, time.Since(start).Round(time.Millisecond))
-	})
-}
-
 func handleShutdown(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -657,6 +656,32 @@ func handleRestart(w http.ResponseWriter, r *http.Request) {
 		cmd.Stderr = os.Stderr
 		cmd.Start()
 	}()
+}
+
+func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"logs": enableLogs.Load()})
+}
+
+func handleSettingsLogs(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	enableLogs.Store(body.Enabled)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"logs": body.Enabled})
 }
 
 func handleJobsSub(w http.ResponseWriter, r *http.Request) {

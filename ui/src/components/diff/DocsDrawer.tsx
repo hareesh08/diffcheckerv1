@@ -80,6 +80,38 @@ const sections = [
     ),
   },
   {
+    id: "workspace",
+    title: "Workspace",
+    body: (
+      <div className="space-y-2">
+        <div>
+          <p className="font-semibold">New Compare</p>
+          <p className="mt-0.5 text-muted-foreground">
+            Upload two files and configure comparison options.
+          </p>
+        </div>
+        <div>
+          <p className="font-semibold">History</p>
+          <p className="mt-0.5 text-muted-foreground">
+            Browse past comparisons, reopen, rename, or export them.
+          </p>
+        </div>
+        <div>
+          <p className="font-semibold">Exports</p>
+          <p className="mt-0.5 text-muted-foreground">
+            View and manage all exported files with custom names.
+          </p>
+        </div>
+        <div>
+          <p className="font-semibold">Settings</p>
+          <p className="mt-0.5 text-muted-foreground">
+            Toggle request logging for diagnostics.
+          </p>
+        </div>
+      </div>
+    ),
+  },
+  {
     id: "formats",
     title: "Supported formats",
     body: (
@@ -94,60 +126,54 @@ const sections = [
     id: "api",
     title: "REST API",
     body: (
-      <div className="space-y-1.5">
+      <div className="space-y-3">
         <p className="text-muted-foreground">
           All endpoints are available locally on the same origin.
         </p>
-        <ul className="list-disc space-y-1 pl-4">
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">POST /api/diff</code>{" "}
-            — text diff
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">POST /api/upload</code>{" "}
-            — multipart upload
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">POST /api/sheets</code>{" "}
-            — list sheets
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">POST /api/jobs</code>{" "}
-            — create comparison job
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">
-              GET /api/jobs/{"{id}"}/status
-            </code>{" "}
-            — job status + summary + progress
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">
-              GET /api/jobs/{"{id}"}/rows
-            </code>{" "}
-            — paginated rows
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">
-              POST /api/jobs/{"{id}"}/cancel
-            </code>{" "}
-            — cancel running job
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">
-              POST /api/jobs/{"{id}"}/export
-            </code>{" "}
-            — export CSV, JSONL, XLSX, or PDF
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">GET /api/history</code>{" "}
-            — list comparison history
-          </li>
-          <li>
-            <code className="rounded bg-accent px-1 py-0.5">GET /api/exports</code>{" "}
-            — list export history
-          </li>
-        </ul>
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Files & sheets
+          </p>
+          <div className="code-block">
+{`POST /api/upload
+POST /api/sheets`}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Comparison jobs
+          </p>
+          <div className="code-block">
+{`POST /api/jobs
+GET  /api/jobs/{id}/status
+GET  /api/jobs/{id}/rows
+POST /api/jobs/{id}/cancel
+POST /api/jobs/{id}/export
+POST /api/jobs/{id}/finalize
+GET  /api/jobs/{id}/report`}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            History & exports
+          </p>
+          <div className="code-block">
+{`GET    /api/history
+POST   /api/history/{id}/name
+DELETE /api/history/{id}
+GET    /api/exports
+DELETE /api/exports/{id}`}
+          </div>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Settings
+          </p>
+          <div className="code-block">
+{`GET    /api/settings
+POST   /api/settings/logs`}
+          </div>
+        </div>
       </div>
     ),
   },

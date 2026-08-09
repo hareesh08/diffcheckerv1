@@ -246,3 +246,15 @@ export function openReport(jobId: string, filter: string) {
     "_blank",
   );
 }
+
+export async function getSettings(): Promise<{ logs: boolean }> {
+  return request<{ logs: boolean }>("/api/settings");
+}
+
+export async function setSettingsLogs(enabled: boolean): Promise<{ logs: boolean }> {
+  return request<{ logs: boolean }>("/api/settings/logs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+}

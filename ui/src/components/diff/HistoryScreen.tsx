@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { deleteHistoryJob, listHistory, renameHistoryJob, type HistoryJob } from "@/api";
 import { ExportDialog } from "./ExportDialog";
 import { EmptyState } from "@/components/shared/EmptyState";
@@ -43,6 +53,7 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
   const [draftName, setDraftName] = useState("");
   const [exportJob, setExportJob] = useState<HistoryJob | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HistoryJob | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -93,12 +104,18 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
   }
 
   async function handleDelete(job: HistoryJob) {
-    if (!confirm(`Delete "${job.name}" from history?`)) return;
+    setDeleteTarget(job);
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
     try {
-      await deleteHistoryJob(job.id);
+      await deleteHistoryJob(deleteTarget.id);
       refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Delete failed");
+    } finally {
+      setDeleteTarget(null);
     }
   }
 
@@ -238,6 +255,24 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
           defaultFilter="nonmatches"
         />
       )}
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete comparison</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove &quot;{deleteTarget?.name}&quot; from history? This
+              action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

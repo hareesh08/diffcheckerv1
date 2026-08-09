@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Plus, History, Download, Sun, Moon, BookOpen, Power } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
@@ -9,6 +9,7 @@ import { CompareScreen } from "@/components/screens/CompareScreen";
 import { ResultsScreen } from "@/components/diff/ResultsScreen";
 import { HistoryScreen } from "@/components/diff/HistoryScreen";
 import { ExportsScreen } from "@/components/diff/ExportsScreen";
+import { SettingsScreen } from "@/components/screens/SettingsScreen";
 import { DocsDrawer } from "@/components/diff/DocsDrawer";
 import { shutdownServer } from "@/api";
 
@@ -33,7 +34,7 @@ export type JobSetup = {
   };
 };
 
-type View = "hub" | "compare" | "history" | "exports";
+type View = "hub" | "compare" | "history" | "exports" | "settings";
 
 export default function App() {
   const [view, setView] = useState<View>("hub");
@@ -59,6 +60,20 @@ export default function App() {
   );
   useKeyboard(shortcuts);
 
+  useEffect(() => {
+    // Suppress native browser/webview dialogs and context menu.
+    const noop = () => {};
+    const prevent = (e: Event) => e.preventDefault();
+    // @ts-ignore - override native dialogs
+    window.alert = noop;
+    // @ts-ignore
+    window.confirm = noop;
+    // @ts-ignore
+    window.prompt = noop;
+    document.addEventListener("contextmenu", prevent);
+    return () => document.removeEventListener("contextmenu", prevent);
+  }, []);
+
   function openHistoryJob(id: string) {
     setHistoryJobId(id);
     setCompareStage("results");
@@ -78,6 +93,7 @@ export default function App() {
     { id: "compare", label: "New Compare", icon: Plus },
     { id: "history", label: "History", icon: History },
     { id: "exports", label: "Exports", icon: Download },
+    { id: "settings", label: "Settings", icon: BookOpen },
   ];
 
   return (
@@ -186,6 +202,8 @@ export default function App() {
           {view === "history" && <HistoryScreen onOpen={openHistoryJob} />}
 
           {view === "exports" && <ExportsScreen />}
+
+          {view === "settings" && <SettingsScreen />}
         </main>
       </div>
 

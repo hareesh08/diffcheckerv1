@@ -415,4 +415,17 @@
   .table-row-zebra:hover {
     background: var(--color-accent);
   }
+
+  .code-block {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    line-height: 1.5;
+    overflow-x: auto;
+    white-space: pre;
+    background: var(--color-surface-sunken);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--radius-md);
+    padding: 0.75rem;
+    color: var(--color-foreground);
+  }
 }
