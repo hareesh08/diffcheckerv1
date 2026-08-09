@@ -45,7 +45,11 @@ function parseSummary(job: HistoryJob): { modified?: number; added?: number; del
   }
 }
 
-export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
+export function HistoryScreen({
+  onOpen,
+}: {
+  onOpen: (jobId: string, mode: string, originalName: string, changedName: string) => void;
+}) {
   const [jobs, setJobs] = useState<HistoryJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -193,7 +197,7 @@ export function HistoryScreen({ onOpen }: { onOpen: (jobId: string) => void }) {
                           <>
                             <button
                               type="button"
-                              onClick={() => onOpen(job.id)}
+                              onClick={() => onOpen(job.id, job.mode, job.originalName, job.changedName)}
                               className="min-w-0 flex-1 text-left"
                             >
                               <p className="truncate text-sm font-semibold text-foreground hover:underline">

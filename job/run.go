@@ -1,11 +1,14 @@
 package job
 
 import (
+	"bufio"
 	"context"
 	"io"
+	"os"
 	"strings"
 	"time"
 
+	"diffchecker/diff"
 	"diffchecker/parse"
 	"diffchecker/store"
 )
@@ -39,6 +42,11 @@ func Run(ctx context.Context, j *Job) {
 
 	opts := j.Options
 
+	if opts.Mode == "text" {
+		runText(ctx, j, done, rw)
+		return
+	}
+
 	origR, err := parse.Open(j.OriginalPath, opts.OriginalSheet)
 	if err != nil {
 		done(StatusFailed, "original: "+err.Error())
@@ -57,11 +65,172 @@ func Run(ctx context.Context, j *Job) {
 
 	j.Update(func(jj *Job) { jj.Status = StatusComparing })
 
-	if opts.Mode == "table" {
+	switch opts.Mode {
+	case "table":
 		runTable(ctx, j, done, opts, rw, origR, newR)
-	} else {
+	default:
 		runRows(ctx, j, done, opts, rw, origR, newR)
 	}
+}
+
+// runText performs a line-based diff of two plain-text files and stores each
+// line as a row. Original and changed lines are paired on the same result row
+// (status "modified") when a delete is immediately followed by an insert, so
+// the UI can render a side-by-side diff.
+func runText(ctx context.Context, j *Job, done func(Status, string), rw *store.ResultWriter) {
+	j.Update(func(jj *Job) { jj.Status = StatusParsing })
+
+	readLines := func(path string) ([]string, error) {
+		f, err := os.Open(path)
+		if err != nil {
+			return nil, err
+		}
+		defer f.Close()
+		var lines []string
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
+		for sc.Scan() {
+			lines = append(lines, sc.Text())
+		}
+		if err := sc.Err(); err != nil {
+			return nil, err
+		}
+		return lines, nil
+	}
+
+	orig, err := readLines(j.OriginalPath)
+	if err != nil {
+		done(StatusFailed, "original: "+err.Error())
+		return
+	}
+	changed, err := readLines(j.ChangedPath)
+	if err != nil {
+		done(StatusFailed, "changed: "+err.Error())
+		return
+	}
+
+	j.Update(func(jj *Job) { jj.Status = StatusComparing })
+
+	ops := diff.Myers(orig, changed)
+
+	res := 1
+	origIdx, newIdx := 0, 0
+	emit := func(status string, oVal, nVal string, summary *Summary) {
+		if oVal != "" || status != "added" {
+			if err := rw.PutRow("original", store.Row{Number: res, Values: []string{oVal}}); err != nil {
+				done(StatusFailed, err.Error())
+				return
+			}
+		}
+		if nVal != "" || status != "deleted" {
+			if err := rw.PutRow("changed", store.Row{Number: res, Values: []string{nVal}}); err != nil {
+				done(StatusFailed, err.Error())
+				return
+			}
+		}
+		t := "equal"
+		switch status {
+		case "added":
+			t = "added"
+		case "deleted":
+			t = "deleted"
+		case "modified":
+			t = "modified"
+		}
+		if err := rw.Put(res, t, []store.Change{
+			{RowNumber: res, Ref: "line" + itoa(res), Old: oVal, New: nVal, Type: status},
+		}); err != nil {
+			done(StatusFailed, err.Error())
+			return
+		}
+		switch status {
+		case "equal":
+			summary.MatchedRows++
+		case "modified":
+			summary.ModifiedRows++
+			summary.ModifiedCells++
+		case "added":
+			summary.AddedRows++
+		case "deleted":
+			summary.DeletedRows++
+		}
+		res++
+	}
+
+	i := 0
+	for i < len(ops) {
+		select {
+		case <-ctx.Done():
+			done(StatusCancelled, "")
+			return
+		default:
+		}
+		op := ops[i]
+		switch op.Type {
+		case "equal":
+			oVal := ""
+			if origIdx < len(orig) {
+				oVal = orig[origIdx]
+			}
+			nVal := ""
+			if newIdx < len(changed) {
+				nVal = changed[newIdx]
+			}
+			emit("equal", oVal, nVal, &j.Summary)
+			origIdx++
+			newIdx++
+			i++
+		case "delete":
+			var dels []string
+			for i < len(ops) && ops[i].Type == "delete" {
+				dels = append(dels, ops[i].Text)
+				i++
+			}
+			var ins []string
+			for i < len(ops) && ops[i].Type == "insert" {
+				ins = append(ins, ops[i].Text)
+				i++
+			}
+			n := len(dels)
+			if len(ins) > n {
+				n = len(ins)
+			}
+			for k := 0; k < n; k++ {
+				old := ""
+				if k < len(dels) {
+					old = dels[k]
+				}
+				new := ""
+				if k < len(ins) {
+					new = ins[k]
+				}
+				status := "deleted"
+				switch {
+				case new != "" && old != "":
+					status = "modified"
+				case new != "":
+					status = "added"
+				}
+				emit(status, old, new, &j.Summary)
+			}
+			origIdx += len(dels)
+			newIdx += len(ins)
+		case "insert":
+			emit("added", "", ops[i].Text, &j.Summary)
+			newIdx++
+			i++
+		}
+	}
+
+	if err := rw.Close(); err != nil {
+		done(StatusFailed, err.Error())
+		return
+	}
+	j.Update(func(jj *Job) {
+		jj.Progress = 1
+		jj.ProgressLabel = "lines compared"
+	})
+	done(StatusCompleted, "")
 }
 
 // runRows is the positional, index-by-index comparison. It is the historical

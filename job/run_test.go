@@ -260,6 +260,82 @@ func TestRunTableModeInsertAndReorder(t *testing.T) {
 	_ = addRowNumber
 }
 
+func writeText(t *testing.T, path string, lines []string) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	for _, l := range lines {
+		f.WriteString(l + "\n")
+	}
+}
+
+func TestRunTextMode(t *testing.T) {
+	dir := t.TempDir()
+	orig := filepath.Join(dir, "a.txt")
+	changed := filepath.Join(dir, "b.txt")
+	dbPath := filepath.Join(dir, "r.db")
+
+	writeText(t, orig, []string{
+		"line one",
+		"line two",
+		"removed line",
+		"line four",
+	})
+	writeText(t, changed, []string{
+		"line one",
+		"line two changed",
+		"line four",
+		"added line",
+	})
+
+	j := &Job{
+		ID: "test-text", OriginalPath: orig, ChangedPath: changed, StorePath: dbPath,
+		Options: Options{Mode: "text"},
+	}
+	Run(context.Background(), j)
+	if j.Status != StatusCompleted {
+		t.Fatalf("status = %s (%s), want completed", j.Status, j.Error)
+	}
+	if j.Summary.MatchedRows != 2 || j.Summary.ModifiedRows != 1 || j.Summary.DeletedRows != 1 || j.Summary.AddedRows != 1 {
+		t.Fatalf("summary = %+v, want matched=2 modified=1 deleted=1 added=1", j.Summary)
+	}
+
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	rows, total, err := db.Results(j.ID, "all", 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 5 {
+		t.Fatalf("total = %d, want 5", total)
+	}
+	// The modified pair must have both original and changed line on the same row.
+	var sawMod, sawDel bool
+	for _, r := range rows {
+		switch r.Status {
+		case "modified":
+			sawMod = true
+			if len(r.OriginalValues) != 1 || r.OriginalValues[0] != "line two" {
+				t.Fatalf("modified originalValues = %v, want [line two]", r.OriginalValues)
+			}
+			if len(r.ChangedValues) != 1 || r.ChangedValues[0] != "line two changed" {
+				t.Fatalf("modified changedValues = %v, want [line two changed]", r.ChangedValues)
+			}
+		case "deleted":
+			sawDel = true
+		}
+	}
+	if !sawMod || !sawDel {
+		t.Fatalf("want modified+deleted rows, got %+v", rows)
+	}
+}
+
 func TestRunCancel(t *testing.T) {
 	dir := t.TempDir()
 	orig := filepath.Join(dir, "a.csv")

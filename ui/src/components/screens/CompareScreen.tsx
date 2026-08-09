@@ -6,6 +6,35 @@ import { Plus, ArrowRight, X } from "lucide-react";
 
 type Side = "a" | "b";
 
+const TEXT_EXTS = [
+  "txt",
+  "md",
+  "log",
+  "json",
+  "yaml",
+  "yml",
+  "xml",
+  "html",
+  "css",
+  "js",
+  "ts",
+  "go",
+  "py",
+  "java",
+  "c",
+  "cpp",
+  "h",
+  "sql",
+  "sh",
+  "bat",
+];
+
+function isTextFile(name: string): boolean {
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return false;
+  return TEXT_EXTS.includes(name.slice(dot + 1).toLowerCase());
+}
+
 export function CompareScreen({
   onRun,
   initialSetup,
@@ -25,7 +54,9 @@ export function CompareScreen({
   const [dragOver, setDragOver] = useState<Side | null>(null);
   const [sheetA, setSheetA] = useState(initialSetup?.sheetA ?? "");
   const [sheetB, setSheetB] = useState(initialSetup?.sheetB ?? "");
-  const [mode, setMode] = useState<"table" | "rows">(initialSetup?.options.mode ?? "table");
+  const [mode, setMode] = useState<"table" | "rows" | "text">(
+    initialSetup?.options.mode ?? "table",
+  );
   const [ignoreWhitespace, setIgnoreWhitespace] = useState(
     initialSetup?.options.ignoreWhitespace ?? true,
   );
@@ -41,12 +72,18 @@ export function CompareScreen({
     try {
       const meta: UploadedFileMeta = await uploadFile(file);
       const sheets = await getSheets(meta.path);
-      setFiles((f) => ({
-        ...f,
+      const next = {
+        ...files,
         [side]: { path: meta.path, name: meta.name, size: meta.size, sheets: sheets.sheets },
-      }));
+      };
+      setFiles(next);
       if (side === "a" && sheets.sheets[0]) setSheetA(sheets.sheets[0]);
       if (side === "b" && sheets.sheets[0]) setSheetB(sheets.sheets[0]);
+      const a = side === "a" ? meta.name : (files.a?.name ?? "");
+      const b = side === "b" ? meta.name : (files.b?.name ?? "");
+      if (a && b && isTextFile(a) && isTextFile(b)) {
+        setMode("text");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed");
     } finally {
@@ -107,7 +144,7 @@ export function CompareScreen({
               {files[side] ? (
                 <div className="flex items-center gap-3 px-4 py-3">
                   <div className="grid size-8 shrink-0 place-items-center rounded border border-border bg-background font-mono text-[10px] font-bold text-muted-foreground">
-                    XLS
+                    {isTextFile(files[side]!.name) ? "TXT" : "XLS"}
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-mono text-xs font-semibold text-foreground">
@@ -164,7 +201,7 @@ export function CompareScreen({
             <p className="eyebrow mb-2">Options</p>
 
             {/* Sheet selectors */}
-            {(files.a!.sheets.length > 1 || files.b!.sheets.length > 1) && (
+            {(files.a!.sheets.length > 1 || files.b!.sheets.length > 1) && mode !== "text" && (
               <div className="grid grid-cols-2 gap-3">
                 {(["a", "b"] as const).map((side) => (
                   <div key={side}>
@@ -202,6 +239,11 @@ export function CompareScreen({
                   title: "Rows — sequential",
                   body: "Compares index by index.",
                 },
+                {
+                  id: "text" as const,
+                  title: "Text — line based",
+                  body: "Side-by-side line diff of plain text files.",
+                },
               ].map((m) => (
                 <button
                   key={m.id}
@@ -217,9 +259,7 @@ export function CompareScreen({
                   <div
                     className={cn(
                       "mt-0.5 size-3 shrink-0 rounded-full border-2 transition-colors",
-                      mode === m.id
-                        ? "border-amber-500 bg-amber-500"
-                        : "border-muted-foreground",
+                      mode === m.id ? "border-amber-500 bg-amber-500" : "border-muted-foreground",
                     )}
                   />
                   <div>
@@ -260,18 +300,20 @@ export function CompareScreen({
                   <span className="text-[11px] font-medium">{t.label}</span>
                 </button>
               ))}
-              <div className="flex items-center gap-2">
-                <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Header line
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={headerRow}
-                  onChange={(e) => setHeaderRow(Number(e.target.value))}
-                  className="w-14 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
-                />
-              </div>
+              {mode !== "text" && (
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Header line
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={headerRow}
+                    onChange={(e) => setHeaderRow(Number(e.target.value))}
+                    className="w-14 rounded-md border border-border bg-background px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-amber-500/40"
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

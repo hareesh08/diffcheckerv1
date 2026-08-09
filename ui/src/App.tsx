@@ -26,7 +26,7 @@ export type JobSetup = {
   sheetA: string;
   sheetB: string;
   options: {
-    mode: "table" | "rows";
+    mode: "table" | "rows" | "text";
     ignoreWhitespace: boolean;
     ignoreCase: boolean;
     headerRow: number;
@@ -74,8 +74,24 @@ export default function App() {
     return () => document.removeEventListener("contextmenu", prevent);
   }, []);
 
-  function openHistoryJob(id: string) {
+  function openHistoryJob(id: string, mode: string, originalName = "", changedName = "") {
     setHistoryJobId(id);
+    setSetup({
+      fileA: { path: "", name: originalName, size: 0, sheets: [] },
+      fileB: { path: "", name: changedName, size: 0, sheets: [] },
+      sheetA: "",
+      sheetB: "",
+      options: {
+        mode: (mode === "text" || mode === "table" || mode === "rows" ? mode : "table") as
+          | "table"
+          | "rows"
+          | "text",
+        ignoreWhitespace: true,
+        ignoreCase: false,
+        headerRow: 1,
+        rowKeyColumn: "",
+      },
+    });
     setCompareStage("results");
     setView("compare");
   }

@@ -13,6 +13,7 @@ import {
 } from "@/api";
 import type { JobSetup } from "@/App";
 import { ExportDialog } from "./ExportDialog";
+import { TextDiffView } from "./TextDiffView";
 import { FilterBar } from "@/components/shared/FilterBar";
 import { ArrowLeft } from "lucide-react";
 
@@ -143,6 +144,7 @@ export function ResultsScreen({
   const done = status?.status === "completed";
   const running =
     status?.status === "queued" || status?.status === "parsing" || status?.status === "comparing";
+  const isText = setup.options.mode === "text";
 
   function handleCancel() {
     if (jobId) cancelJob(jobId);
@@ -179,23 +181,25 @@ export function ResultsScreen({
             Back
           </button>
           <div className="h-4 w-px bg-hairline" />
-          <div className="flex rounded-md border border-border bg-background p-0.5">
-            {(["redline", "original", "changed"] as const).map((v) => (
-              <button
-                key={v}
-                type="button"
-                onClick={() => setView(v)}
-                className={cn(
-                  "rounded px-2.5 py-1 text-xs capitalize transition-colors",
-                  view === v
-                    ? "bg-foreground text-background font-medium"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {v}
-              </button>
-            ))}
-          </div>
+          {!isText && (
+            <div className="flex rounded-md border border-border bg-background p-0.5">
+              {(["redline", "original", "changed"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setView(v)}
+                  className={cn(
+                    "rounded px-2.5 py-1 text-xs capitalize transition-colors",
+                    view === v
+                      ? "bg-foreground text-background font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="h-4 w-px bg-hairline" />
           <span className="rounded-md border border-border bg-card px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
             {setup.fileA.name}
@@ -302,6 +306,8 @@ export function ResultsScreen({
             )}
           </div>
         </div>
+      ) : isText ? (
+        <TextDiffView rows={rows} />
       ) : (
         /* Table */
         <div className="flex-1 overflow-y-auto bg-background">
