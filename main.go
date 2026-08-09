@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"context"
@@ -15,12 +15,15 @@ import (
 	"strings"
 	"time"
 
+	"diffchecker/central"
 	"diffchecker/diff"
+	"diffchecker/export"
 	"diffchecker/job"
 	"diffchecker/parse"
 	"diffchecker/store"
 
 	"github.com/google/uuid"
+	"github.com/jchv/go-webview2"
 )
 
 const maxUploadBytes = 4 << 30 // 4 GB
@@ -28,6 +31,8 @@ const maxUploadBytes = 4 << 30 // 4 GB
 var registry = job.NewRegistry()
 var uploadsDir = "./uploads"
 var jobsDir = "./jobs"
+var dataDir = "./data"
+var centralDB *central.DB
 var httpServer *http.Server
 var enableLogs bool
 
@@ -277,6 +282,7 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
+		Name   string `json:"name"`
 		Filter string `json:"filter"`
 		Format string `json:"format"`
 	}
@@ -287,6 +293,10 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 	if req.Format == "" {
 		req.Format = "csv"
 	}
+	if req.Name == "" {
+		req.Name = j.OriginalName + "-vs-" + j.ChangedName
+	}
+	name := export.SanitizeName(req.Name)
 	db, err := store.Open(j.StorePath)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -294,29 +304,219 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.Close()
 
-	switch req.Format {
-	case "csv":
+	// Record the export in history.
+	if centralDB != nil {
+		_ = centralDB.AddExport(central.Export{
+			JobID:  j.ID,
+			Name:   name,
+			Format: req.Format,
+			Filter: req.Filter,
+		})
+	}
+
+	switch export.Format(req.Format) {
+	case export.FormatCSV:
 		w.Header().Set("Content-Type", "text/csv")
-		w.Header().Set("Content-Disposition", "attachment; filename=diff-"+req.Filter+".csv")
-		w.Write([]byte("status,row,ref,old,new,type\n"))
-		if err := db.Export(j.ID, req.Filter, w); err != nil {
-			return
-		}
-	case "jsonl":
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Header().Set("Content-Disposition", "attachment; filename=diff-"+req.Filter+".jsonl")
-		rows, _, err := db.Results(j.ID, req.Filter, 0, int(^uint(0)>>1))
-		if err != nil {
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".csv")
+		if err := export.WriteCSV(w, db, j.ID, req.Filter); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		for _, row := range rows {
-			b, _ := json.Marshal(row)
-			w.Write(append(b, '\n'))
+	case export.FormatJSONL:
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".jsonl")
+		if err := export.WriteJSONL(w, db, j.ID, req.Filter); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case export.FormatXLSX:
+		w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".xlsx")
+		if err := export.WriteXLSX(w, db, j.ID, req.Filter); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	case export.FormatPDF:
+		// PDF is delivered as an HTML report the browser prints to PDF.
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Disposition", "attachment; filename="+name+".html")
+		if err := export.WriteReport(w, db, j.ID, req.Filter, req.Name, j.OriginalName, j.ChangedName); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
 		}
 	default:
 		http.Error(w, "unsupported format", http.StatusBadRequest)
 	}
+}
+
+// handleReport serves a styled HTML report for a job (for print-to-PDF).
+func handleReport(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	id = strings.TrimSuffix(id, "/report")
+	j, ok := registry.Get(id)
+	if !ok {
+		http.Error(w, "job not found", http.StatusNotFound)
+		return
+	}
+	filter := r.URL.Query().Get("filter")
+	if filter == "" {
+		filter = "all"
+	}
+	db, err := store.Open(j.StorePath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+	title := j.OriginalName + " vs " + j.ChangedName
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := export.WriteReport(w, db, j.ID, filter, title, j.OriginalName, j.ChangedName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// requireCentral ensures the central DB is available, else 503.
+func requireCentral(w http.ResponseWriter) bool {
+	if centralDB == nil {
+		http.Error(w, "central store unavailable", http.StatusServiceUnavailable)
+		return false
+	}
+	return true
+}
+
+// handleHistoryList GET /api/history
+func handleHistoryList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireCentral(w) {
+		return
+	}
+	jobs, err := centralDB.ListJobs()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"jobs": jobs})
+}
+
+// handleHistorySub handles /api/history/{id}/name and DELETE /api/history/{id}
+func handleHistorySub(w http.ResponseWriter, r *http.Request) {
+	if !requireCentral(w) {
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/history/")
+	switch {
+	case strings.HasSuffix(r.URL.Path, "/name") && r.Method == http.MethodPost:
+		id = strings.TrimSuffix(id, "/name")
+		var req struct{ Name string `json:"name"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		if err := centralDB.RenameJob(id, req.Name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	case r.Method == http.MethodDelete:
+		if err := centralDB.DeleteJob(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	default:
+		http.Error(w, "not found", http.StatusNotFound)
+	}
+}
+
+// handleJobsFinalize POST /api/jobs/{id}/finalize persists a completed job.
+func handleJobsFinalize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	id = strings.TrimSuffix(id, "/finalize")
+	if !requireCentral(w) {
+		return
+	}
+	j, ok := registry.Get(id)
+	if !ok {
+		http.Error(w, "job not found", http.StatusNotFound)
+		return
+	}
+	snap := j.Snapshot()
+	if snap.Status != job.StatusCompleted {
+		http.Error(w, "job not completed", http.StatusBadRequest)
+		return
+	}
+	name := snap.OriginalName + " vs " + snap.ChangedName
+	err := centralDB.SaveJob(central.HistoryJob{
+		ID:           snap.ID,
+		Name:         name,
+		Mode:         snap.Mode,
+		OriginalName: snap.OriginalName,
+		ChangedName:  snap.ChangedName,
+		Status:       string(snap.Status),
+		Summary:      central.JSON(snap.Summary),
+		Meta:         central.JSON(snap.Options),
+		CreatedAt:    snap.CreatedAt,
+		CompletedAt:  snap.CompletedAt,
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
+}
+
+
+// handleExportsList GET /api/exports
+func handleExportsList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireCentral(w) {
+		return
+	}
+	exports, err := centralDB.ListExports()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"exports": exports})
+}
+
+// handleExportsDelete DELETE /api/exports/{id}
+func handleExportsDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !requireCentral(w) {
+		return
+	}
+	idStr := strings.TrimPrefix(r.URL.Path, "/api/exports/")
+	id, err := strconv.ParseInt(idStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	if err := centralDB.DeleteExport(id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"status": "deleted"})
 }
 
 func main() {
@@ -337,6 +537,14 @@ func main() {
 
 	os.MkdirAll(uploadsDir, 0755)
 	os.MkdirAll(jobsDir, 0755)
+	os.MkdirAll(dataDir, 0755)
+	cDB, err := central.Open(filepath.Join(dataDir, "differ.db"))
+	if err != nil {
+		log.Printf("warning: cannot open central db: %v", err)
+	} else {
+		centralDB = cDB
+		defer cDB.Close()
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/diff", handleDiff)
@@ -344,6 +552,10 @@ func main() {
 	mux.HandleFunc("/api/sheets", handleSheets)
 	mux.HandleFunc("/api/jobs", handleCreateJob)
 	mux.HandleFunc("/api/jobs/", handleJobsSub)
+	mux.HandleFunc("/api/history", handleHistoryList)
+	mux.HandleFunc("/api/history/", handleHistorySub)
+	mux.HandleFunc("/api/exports", handleExportsList)
+	mux.HandleFunc("/api/exports/", handleExportsDelete)
 	mux.HandleFunc("/api/shutdown", handleShutdown)
 	mux.HandleFunc("/api/restart", handleRestart)
 	if hasUIBuild() {
@@ -368,12 +580,40 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	<-quit
+	runUI(bindHost + ":8080")
+
 	log.Println("Shutting down...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	httpServer.Shutdown(ctx)
+}
+
+// runUI opens a native WebView2 window pointing at the embedded UI. It blocks
+// until the window is closed, then the server shuts down. If WebView2 is not
+// available (e.g. no runtime installed), it falls back to opening the system
+// browser instead.
+func runUI(url string) {
+	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		Debug:     false,
+		AutoFocus: true,
+		WindowOptions: webview2.WindowOptions{
+			Title: "Differ Pro",
+		},
+	})
+	if w == nil {
+		openBrowser(url)
+		return
+	}
+	defer w.Destroy()
+	w.SetSize(1280, 800, webview2.HintNone)
+	w.Navigate("http://" + url)
+	w.Run()
+}
+
+// openBrowser opens the given URL in the user's default browser.
+func openBrowser(url string) {
+	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", "http://"+url)
+	cmd.Start()
 }
 
 func logMiddleware(next http.Handler) http.Handler {
@@ -428,8 +668,12 @@ func handleJobsSub(w http.ResponseWriter, r *http.Request) {
 		handleJobRows(w, r)
 	case strings.HasSuffix(p, "/cancel"):
 		handleJobCancel(w, r)
+	case strings.HasSuffix(p, "/finalize"):
+		handleJobsFinalize(w, r)
 	case strings.HasSuffix(p, "/export"):
 		handleExport(w, r)
+	case strings.HasSuffix(p, "/report"):
+		handleReport(w, r)
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}

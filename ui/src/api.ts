@@ -165,3 +165,84 @@ export function shutdownServer(): Promise<{ status: string }> {
 export function restartServer(): Promise<{ status: string }> {
   return request<{ status: string }>("/api/restart", { method: "POST" });
 }
+
+// â”€â”€ History â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export type HistoryJob = {
+  id: string;
+  name: string;
+  mode: string;
+  originalName: string;
+  changedName: string;
+  status: string;
+  summary: string;
+  meta: string;
+  createdAt: string;
+  completedAt: string;
+};
+
+export type ExportRecord = {
+  id: number;
+  jobId: string;
+  name: string;
+  format: string;
+  filter: string;
+  createdAt: string;
+};
+
+export function listHistory(): Promise<{ jobs: HistoryJob[] }> {
+  return request<{ jobs: HistoryJob[] }>("/api/history");
+}
+
+export function renameHistoryJob(id: string, name: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/history/${encodeURIComponent(id)}/name`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function deleteHistoryJob(id: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/history/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export function finalizeJob(id: string): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/jobs/${encodeURIComponent(id)}/finalize`, {
+    method: "POST",
+  });
+}
+
+export function listExports(): Promise<{ exports: ExportRecord[] }> {
+  return request<{ exports: ExportRecord[] }>("/api/exports");
+}
+
+export function deleteExport(id: number): Promise<{ status: string }> {
+  return request<{ status: string }>(`/api/exports/${id}`, { method: "DELETE" });
+}
+
+export async function exportResultsNamed(
+  jobId: string,
+  name: string,
+  filter: string,
+  format: "csv" | "jsonl" | "xlsx" | "pdf",
+): Promise<Blob> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/export`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, filter, format }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text || `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
+
+export function openReport(jobId: string, filter: string) {
+  window.open(
+    `/api/jobs/${encodeURIComponent(jobId)}/report?filter=${encodeURIComponent(filter)}`,
+    "_blank",
+  );
+}

@@ -1,16 +1,26 @@
 # Differ Pro
 
-Local web app for comparing text and spreadsheet files side-by-side, built with Go.
+Local desktop app for comparing text and spreadsheet files side-by-side. Go backend + React SPA embedded in a native WebView2 window.
 
 Author: Hareesh D
 
 ## Run
 
-```
+```sh
 go run .
 ```
 
-Open http://localhost:8080 in your browser.
+A WebView2 window titled **Differ Pro** opens at 1280x800. The local server binds to `127.0.0.1:8080`. Closing the window shuts the server down.
+
+Flags:
+
+| Flag | Description |
+|---|---|
+| `--local` | Bind to `127.0.0.1` (default) |
+| `--network` | Bind to `0.0.0.0` (LAN access) |
+| `--logs` | Log each HTTP request |
+
+If WebView2 is unavailable, the app falls back to opening the default browser.
 
 ## Features
 
@@ -28,6 +38,12 @@ Open http://localhost:8080 in your browser.
 - Paginated results (never loads the whole diff into the browser)
 - Export results as CSV or JSONL (matches or non-matches)
 
+### Desktop-app workspace
+- App-style shell with persistent sidebar: **New Compare**, **History**, **Exports**
+- **Comparison history** — every completed comparison is saved (SQLite at `data/differ.db`), survives restarts, and can be renamed, reopened, or exported
+- **Custom-name export** — name your file before download; formats **CSV, JSONL, XLSX, PDF** (PDF prints a styled HTML report via the browser)
+- **Exports log** — every generated export is recorded with its name and format
+
 ## API
 
 | Endpoint | Method | Description |
@@ -39,7 +55,14 @@ Open http://localhost:8080 in your browser.
 | `/api/jobs/{id}/status` | GET | Job status + summary + progress |
 | `/api/jobs/{id}/rows` | GET | Paginated rows `?filter=&page=&pageSize=` |
 | `/api/jobs/{id}/cancel` | POST | Cancel running job |
-| `/api/jobs/{id}/export` | POST | Export `{filter, format}` (csv/jsonl) |
+| `/api/jobs/{id}/export` | POST | Export `{name, filter, format}` (csv/jsonl/xlsx/pdf) |
+| `/api/jobs/{id}/finalize` | POST | Persist completed job into history |
+| `/api/jobs/{id}/report` | GET | Styled HTML report `?filter=` (for print-to-PDF) |
+| `/api/history` | GET | List comparison history |
+| `/api/history/{id}/name` | POST | Rename comparison `{name}` |
+| `/api/history/{id}` | DELETE | Remove comparison from history |
+| `/api/exports` | GET | List export history |
+| `/api/exports/{id}` | DELETE | Remove export from history |
 
 ### Job options
 
@@ -59,17 +82,35 @@ Open http://localhost:8080 in your browser.
 ## Structure
 
 ```
-main.go            HTTP server + API
-diff/diff.go       Myers text diff
-parse/             Streaming readers (CSV/TSV/TXT, XLSX/XLSM)
-job/               Async comparison job engine + runner
-store/             SQLite-backed result store (batched writes)
-static/index.html  Web UI
+main.go    HTTP server + API + WebView2 shell
+central/   Central SQLite store (history, exports)
+diff/      Myers text diff
+parse/     Streaming readers (CSV/TSV/TXT, XLSX/XLSM)
+job/       Async comparison job engine + runner
+store/     SQLite-backed result store (batched writes)
+export/    Export writers (CSV, JSONL, XLSX, HTML report)
+embed.go   Embeds ui/dist SPA build into the binary
+ui/        React + TypeScript SPA (built with npm, output to ui/dist)
+```
+
+## Build
+
+```
+npm run build          # in ui/ — builds SPA into ui/dist
+go build -trimpath -ldflags "-H windowsgui" -o differ-pro.exe .
+```
+
+`-H windowsgui` builds a Windows GUI app — no console window. MinGW is required for CGO (WebView2). Build with:
+
+```
+$env:Path = "D:\Programs\MinGW\bin;" + $env:Path
+$env:CGO_ENABLED = "1"
+go build -trimpath -ldflags "-H windowsgui" -o differ-pro.exe .
 ```
 
 ## Tests
 
-```
+```sh
 go test ./...
 ```
 

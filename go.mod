@@ -4,12 +4,14 @@ go 1.25.4
 
 require (
 	github.com/google/uuid v1.6.0
+	github.com/jchv/go-webview2 v0.0.0-20260205173254-56598839c808
 	github.com/xuri/excelize/v2 v2.11.0
 	modernc.org/sqlite v1.56.0
 )
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/jchv/go-winloader v0.0.0-20250406163304-c1995be93bd1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect

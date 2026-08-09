@@ -6,6 +6,7 @@ app.syso
 # Runtime data
 uploads/
 jobs/
+data/
 .commandcode/
 
 # Go
@@ -24,3 +25,7 @@ graphify-out/
 *.zip
 *.exe~
 *.txt~
+
+# IDE / design
+.idea/
+plan/

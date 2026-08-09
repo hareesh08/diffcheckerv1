@@ -1,9 +1,16 @@
-import { useState } from "react";
-import { AppHeader, type Step } from "@/components/diff/AppHeader";
-import { UploadScreen } from "@/components/diff/UploadScreen";
-import { ConfigureScreen } from "@/components/diff/ConfigureScreen";
-import { ResultsScreen } from "@/components/diff/ResultsScreen";
+import { useState, useMemo } from "react";
+import { cn } from "@/lib/utils";
+import { Plus, History, Download, Sun, Moon, BookOpen, Power } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
+import { useKeyboard } from "@/hooks/use-keyboard";
+import { CommandPalette } from "@/components/shared/CommandPalette";
+import { HubScreen } from "@/components/screens/HubScreen";
+import { CompareScreen } from "@/components/screens/CompareScreen";
+import { ResultsScreen } from "@/components/diff/ResultsScreen";
+import { HistoryScreen } from "@/components/diff/HistoryScreen";
+import { ExportsScreen } from "@/components/diff/ExportsScreen";
+import { DocsDrawer } from "@/components/diff/DocsDrawer";
+import { shutdownServer } from "@/api";
 
 export type UploadedFile = {
   path: string;
@@ -26,50 +33,167 @@ export type JobSetup = {
   };
 };
 
+type View = "hub" | "compare" | "history" | "exports";
+
 export default function App() {
-  const [step, setStep] = useState<Step>("upload");
-  const [reached, setReached] = useState<Record<Step, boolean>>({
-    upload: true,
-    configure: false,
-    results: false,
-  });
+  const [view, setView] = useState<View>("hub");
+  const [compareStage, setCompareStage] = useState<"setup" | "results">("setup");
   const [setup, setSetup] = useState<JobSetup | null>(null);
+  const [historyJobId, setHistoryJobId] = useState<string | null>(null);
   const { theme, toggle: toggleTheme } = useTheme();
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [docsOpen, setDocsOpen] = useState(false);
+
+  const shortcuts = useMemo(
+    () => ({
+      k: () => setCmdOpen((o) => !o),
+      n: () => {
+        setView("compare");
+        setCompareStage("setup");
+        setHistoryJobId(null);
+        setSetup(null);
+      },
+      d: toggleTheme,
+    }),
+    [toggleTheme],
+  );
+  useKeyboard(shortcuts);
+
+  function openHistoryJob(id: string) {
+    setHistoryJobId(id);
+    setCompareStage("results");
+    setView("compare");
+  }
+
+  function goCompare() {
+    setView("compare");
+    setCompareStage("setup");
+    setHistoryJobId(null);
+  }
+
+  const modKey = navigator.platform?.includes("Mac") ? "⌘" : "Ctrl";
+
+  const NAV: { id: View; label: string; icon: typeof Plus }[] = [
+    { id: "compare", label: "New Compare", icon: Plus },
+    { id: "history", label: "History", icon: History },
+    { id: "exports", label: "Exports", icon: Download },
+  ];
 
   return (
     <div className="flex h-screen w-full flex-col bg-background font-sans text-foreground">
-      <AppHeader
-        step={step}
-        onStep={(s) => {
-          window.scrollTo(0, 0);
-          setStep(s);
-        }}
-        reached={reached}
+      {/* Header */}
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-hairline bg-surface/80 px-4 backdrop-blur-xl">
+        <div className="flex items-center gap-2">
+          <img src="/logo.svg" alt="Differ Pro" className="size-5 shrink-0 rounded" />
+          <span className="text-sm font-bold tracking-[-0.03em]">
+            Differ <span className="text-primary">Pro</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setCmdOpen(true)}
+            className="flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <span className="font-mono">{modKey}+K</span>
+            <span className="hidden sm:inline">search</span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          >
+            {theme === "dark" ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDocsOpen(true)}
+            className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          >
+            <BookOpen className="size-3.5" />
+          </button>
+          <div className="h-4 w-px bg-hairline mx-0.5" />
+          <div className="grid size-7 place-items-center rounded-full bg-primary/10 text-[10px] font-bold text-primary">
+            H
+          </div>
+        </div>
+      </header>
+
+      <div className="flex min-h-0 flex-1">
+        {/* Sidebar */}
+        <nav className="flex w-48 shrink-0 flex-col border-r border-hairline bg-card">
+          <div className="flex-1 p-2">
+            {NAV.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (item.id === "compare") goCompare();
+                  else setView(item.id);
+                }}
+                className={cn(
+                  "flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                  view === item.id && compareStage === "setup"
+                    ? "bg-accent font-semibold text-foreground"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
+                )}
+              >
+                <item.icon className="size-4 shrink-0" />
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <div className="border-t border-hairline p-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+            >
+              {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
+              {theme === "dark" ? "Light mode" : "Dark mode"}
+            </button>
+          </div>
+        </nav>
+
+        {/* Main content */}
+        <main className="flex min-w-0 flex-1 flex-col">
+          {view === "hub" && <HubScreen onNewCompare={goCompare} onOpenJob={openHistoryJob} />}
+
+          {view === "compare" && compareStage === "setup" && (
+            <CompareScreen
+              onRun={(s) => {
+                setSetup(s);
+                setCompareStage("results");
+              }}
+            />
+          )}
+
+          {view === "compare" && compareStage === "results" && setup && (
+            <ResultsScreen
+              setup={setup}
+              onBack={() => setCompareStage("setup")}
+              jobId={historyJobId}
+              onFinished={() => setHistoryJobId(null)}
+            />
+          )}
+
+          {view === "history" && <HistoryScreen onOpen={openHistoryJob} />}
+
+          {view === "exports" && <ExportsScreen />}
+        </main>
+      </div>
+
+      <CommandPalette
+        open={cmdOpen}
+        onOpenChange={setCmdOpen}
+        onNewCompare={goCompare}
+        onGotoHistory={() => setView("history")}
+        onOpenJob={openHistoryJob}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
-      {step === "upload" && (
-        <UploadScreen
-          onLoaded={(a, b) => {
-            setSetup(a && b ? { fileA: a, fileB: b, sheetA: a.sheets[0] ?? "", sheetB: b.sheets[0] ?? "", options: { mode: "table", ignoreWhitespace: true, ignoreCase: false, headerRow: 1, rowKeyColumn: "" } } : null);
-            setReached((r) => ({ ...r, configure: true }));
-            setStep("configure");
-          }}
-        />
-      )}
-      {step === "configure" && setup && (
-        <ConfigureScreen
-          setup={setup}
-          onChange={setSetup}
-          onRun={() => {
-            setReached((r) => ({ ...r, results: true }));
-            setStep("results");
-          }}
-        />
-      )}
-      {step === "results" && setup && (
-        <ResultsScreen setup={setup} onBack={() => setStep("configure")} />
-      )}
+      <DocsDrawer open={docsOpen} onOpenChange={setDocsOpen} />
     </div>
   );
 }
