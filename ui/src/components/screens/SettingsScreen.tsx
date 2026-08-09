@@ -13,10 +13,12 @@ export function SettingsScreen() {
   const [streamActive, setStreamActive] = useState(false);
 
   useEffect(() => {
-    getSettings().then((s) => {
-      setLogs(s.logs);
-      setBindMode(s.bindMode === "network" ? "network" : "local");
-    }).catch(() => {});
+    getSettings()
+      .then((s) => {
+        setLogs(s.logs);
+        setBindMode(s.bindMode === "network" ? "network" : "local");
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -63,9 +65,7 @@ export function SettingsScreen() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="border-b border-hairline bg-surface-raised px-5 py-4">
         <h1 className="text-2xl font-bold tracking-[-0.04em]">Settings</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          App preferences and diagnostics.
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">App preferences and diagnostics.</p>
       </div>
 
       <div className="mx-auto max-w-2xl flex-1 overflow-y-auto px-5 py-6">
@@ -152,12 +152,7 @@ export function SettingsScreen() {
                 />
               </button>
             </div>
-            {logs && (
-              <TerminalPanel
-                logs={logLines}
-                onClear={() => setLogLines([])}
-              />
-            )}
+            {logs && <TerminalPanel logs={logLines} onClear={() => setLogLines([])} />}
           </section>
 
           {/* Shortcuts */}

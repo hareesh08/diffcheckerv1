@@ -6,7 +6,6 @@ export type TextDiffLine = {
   status: "same" | "modified" | "added" | "deleted";
 };
 
-
 /** Simple LCS-based line diff, enough for side-by-side text comparison. */
 export function diffLines(a: string, b: string): TextDiffLine[] {
   const left = a.split("\n");
@@ -35,7 +34,13 @@ export function diffLines(a: string, b: string): TextDiffLine[] {
   let rn = 1;
   while (i < n && j < m) {
     if (at(left, i) === at(right, j)) {
-      out.push({ left: at(left, i), right: at(right, j), leftNo: ln++, rightNo: rn++, status: "same" });
+      out.push({
+        left: at(left, i),
+        right: at(right, j),
+        leftNo: ln++,
+        rightNo: rn++,
+        status: "same",
+      });
       i++;
       j++;
     } else if (score(i + 1, j) >= score(i, j + 1)) {

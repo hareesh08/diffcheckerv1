@@ -269,9 +269,8 @@ export async function setSettingsBindMode(mode: "local" | "network"): Promise<{ 
 
 export function getLogsStream(onLog: (line: string) => void): EventSource {
   const es = new EventSource("/api/settings/logs/stream");
-  es.onmessage = () => {
-    // @ts-ignore
-    const line = (es as any).data as string;
+  es.onmessage = (ev: MessageEvent) => {
+    const line = ev.data as string;
     if (line) onLog(line);
   };
   return es;

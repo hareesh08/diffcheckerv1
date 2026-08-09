@@ -595,7 +595,11 @@ func main() {
 	if hasUIBuild() {
 		mux.Handle("/", uiHandler())
 	} else {
-		mux.Handle("/", http.FileServer(http.Dir("./static")))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			io.WriteString(w, "Differ Pro UI not built.\n\nRun `npm run build` in ui/ and rebuild the Go binary.")
+		})
 	}
 
 	httpServer = &http.Server{

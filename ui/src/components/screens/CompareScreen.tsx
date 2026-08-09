@@ -43,8 +43,8 @@ export function CompareScreen({
   initialSetup?: JobSetup | null;
 }) {
   const [files, setFiles] = useState<{
-    a?: { path: string; name: string; size: number; sheets: string[] };
-    b?: { path: string; name: string; size: number; sheets: string[] };
+    a: { path: string; name: string; size: number; sheets: string[] } | undefined;
+    b: { path: string; name: string; size: number; sheets: string[] } | undefined;
   }>({
     a: initialSetup ? { ...initialSetup.fileA, sheets: [initialSetup.sheetA] } : undefined,
     b: initialSetup ? { ...initialSetup.fileB, sheets: [initialSetup.sheetB] } : undefined,

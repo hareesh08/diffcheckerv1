@@ -136,7 +136,8 @@ export function HubScreen({
             <div className="space-y-1.5">
               {jobs.map((job) => {
                 const s = parseSummary(job);
-                const mode = MODE_META[job.mode] ?? MODE_META.rows;
+                const mode = MODE_META[job.mode] ??
+                  MODE_META["rows"] ?? { icon: Rows3, label: "Rows" };
                 const ModeIcon = mode.icon;
                 return (
                   <button

@@ -25,7 +25,9 @@ export function useIsMobile() {
 }
 
 export function useIsTablet() {
-  return useMediaQuery(`(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: ${TABLET_BREAKPOINT - 1}px)`);
+  return useMediaQuery(
+    `(min-width: ${MOBILE_BREAKPOINT}px) and (max-width: ${TABLET_BREAKPOINT - 1}px)`,
+  );
 }
 
 export function useIsDesktop() {

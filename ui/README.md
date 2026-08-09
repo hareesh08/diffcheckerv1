@@ -1,29 +1,29 @@
-# Welcome to your Lovable project
+# Differ Pro UI
 
-This project was built with [Lovable](https://lovable.dev).
-
-## Build with Lovable
-
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+React + TypeScript single-page app for Differ Pro. Built with Vite, React 19, and Tailwind CSS 4.
 
 ## Development
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+npm install
+npm run dev      # Vite dev server
+npm run build    # Production build into dist/
 ```
 
-## Built with
+The production bundle in `dist/` is embedded into the Go binary at compile time via `go:embed` (see the root `embed.go`). A fresh build is required before rebuilding the desktop app so the binary ships the latest UI.
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+## Source layout
+
+```
+src/
+  App.tsx                  Root shell: sidebar, routing between screens
+  api.ts                   Typed HTTP client for the backend API
+  components/
+    screens/               High-level screens (Compare, Hub, Settings)
+    diff/                  Diff screens (Results, History, Exports, TextDiffView)
+    shared/                Command palette, empty state, filter bar, terminal
+    ui/                    Local shadcn/ui-style primitives
+  hooks/                   use-keyboard, use-mobile, use-theme
+  lib/                     text-diff, utils
+  styles.css               Global styles + design tokens
+```

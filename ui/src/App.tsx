@@ -75,11 +75,12 @@ export default function App() {
     // Suppress native browser/webview dialogs and context menu.
     const noop = () => {};
     const prevent = (e: Event) => e.preventDefault();
-    // @ts-ignore - override native dialogs
+    // Assignment to these globals is intentionally overridden for the native shell.
     window.alert = noop;
-    // @ts-ignore
+    // Override confirm/prompt return types so no native dialog ever appears.
+    // @ts-expect-error intentionally replaced by a no-op
     window.confirm = noop;
-    // @ts-ignore
+    // @ts-expect-error intentionally replaced by a no-op
     window.prompt = noop;
     document.addEventListener("contextmenu", prevent);
     return () => document.removeEventListener("contextmenu", prevent);
@@ -101,9 +102,7 @@ export default function App() {
       sheetB: "",
       options: {
         mode: (mode === "text" || mode === "table" || mode === "rows" ? mode : "table") as
-          | "table"
-          | "rows"
-          | "text",
+          "table" | "rows" | "text",
         ignoreWhitespace: true,
         ignoreCase: false,
         headerRow: 1,
@@ -137,8 +136,18 @@ export default function App() {
       <header className="flex h-11 shrink-0 items-center justify-between border-b border-hairline bg-surface-raised/80 px-4 backdrop-blur-xl">
         <div className="flex items-center gap-2.5">
           <div className="grid size-6 shrink-0 place-items-center rounded-md bg-foreground text-background">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="size-3.5">
-              <path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16" strokeLinecap="round" strokeLinejoin="round" />
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              className="size-3.5"
+            >
+              <path
+                d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
           <span className="text-sm font-semibold tracking-[-0.02em]">
@@ -190,9 +199,7 @@ export default function App() {
                 }}
                 className={cn(
                   "sidebar-item w-full",
-                  view === item.id && compareStage === "setup"
-                    ? "[aria-current='page']"
-                    : "",
+                  view === item.id && compareStage === "setup" ? "[aria-current='page']" : "",
                 )}
               >
                 <item.icon className="size-4 shrink-0" />
@@ -201,11 +208,7 @@ export default function App() {
             ))}
           </div>
           <div className="border-t border-hairline p-2">
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="sidebar-item w-full"
-            >
+            <button type="button" onClick={toggleTheme} className="sidebar-item w-full">
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
               {theme === "dark" ? "Light mode" : "Dark mode"}
             </button>

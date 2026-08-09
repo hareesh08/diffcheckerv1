@@ -21,20 +21,22 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
 
-      - name: Install UI deps (bun)
-        run: bun install
+      - name: Install UI deps (npm)
+        run: npm ci
         working-directory: ui
 
       - name: Clean UI build output
         run: rm -rf ui/dist
 
       - name: Build React UI (static SPA)
-        run: bun run build
+        run: npm run build
         working-directory: ui
 
       - name: Inspect UI build output
@@ -44,7 +46,7 @@ jobs:
           echo "--- ui/dist/index.html ---"
           cat ui/dist/index.html | head -25
           if [ ! -s ui/dist/index.html ]; then
-            echo "::error::ui/dist/index.html missing or empty after bun build"
+            echo "::error::ui/dist/index.html missing or empty after npm build"
             exit 1
           fi
           if grep -q "UI_NOT_BUILT" ui/dist/index.html; then

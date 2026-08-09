@@ -1,8 +1,26 @@
 # Differ Pro
 
-Local desktop app for comparing text and spreadsheet files side-by-side. Go backend + React SPA embedded in a native WebView2 window.
+Local desktop app for comparing spreadsheet and text files side-by-side. Go backend + React SPA embedded in a native WebView2 window.
 
-Author: Hareesh D
+**Author:** Hareesh D
+
+![Dashboard](screenshot/Dashboard.png)
+
+## Highlights
+
+- **Spreadsheet diff** (CSV / TSV / XLSX / XLSM) — row-by-row, cell-level diffs with old → new values
+- **Text diff** — side-by-side line diff using the Myers shortest-edit-script algorithm
+- **Large-file friendly** — streaming, disk-backed comparison; files up to 4 GB are processed one row at a time, results go to SQLite, never fully in memory
+- **Async jobs** — live progress, cancellation, and status
+- **Comparison history** — every completed comparison is saved and can be reopened, renamed, or exported
+- **Rich export** — CSV, JSONL, XLSX, and a styled HTML report (print-to-PDF)
+- **Desktop shell** — persistent sidebar, keyboard-first command palette, theme toggle (light/dark)
+
+## Screenshots
+
+| Compare files | Diff results | Settings |
+|---|---|---|
+| ![Compare files](screenshot/Comparison-Files-Window.png) | ![Diff UI](screenshot/DiffChecker-Ui.png) | ![Settings](screenshot/Settings.png) |
 
 ## Run
 
@@ -22,21 +40,23 @@ Flags:
 
 If WebView2 is unavailable, the app falls back to opening the default browser.
 
-## Features
+> The UI is embedded from `ui/dist` at compile time. After changing the frontend, run `npm run build` in `ui/` before rebuilding the Go binary (see [Build](#build)).
 
-### Text
-- Side-by-side diff using the Myers algorithm (shortest edit script)
-- Paste two texts and compare
+## Features
 
 ### Excel / CSV (large-file friendly)
 - Compare CSV, TSV, TXT, XLSX, XLSM files
-- **Streaming, disk-backed comparison** — files up to 4 GB are processed one row at a time; results go to SQLite, never fully in memory
+- **Streaming, disk-backed comparison** — files up to 4 GB processed one row at a time; results go to SQLite
 - Asynchronous jobs with live progress and cancellation
 - Cell-level diffs with old → new values
 - Ignore white space / ignore case options
 - Filter results: All, Matches, Non-matches, Modified, Added, Deleted
 - Paginated results (never loads the whole diff into the browser)
 - Export results as CSV or JSONL (matches or non-matches)
+
+### Text
+- Side-by-side line diff using the Myers algorithm (shortest edit script)
+- Auto-detection of plain-text files; paste two texts and compare, or use a `.txt` file directly
 
 ### Desktop-app workspace
 - App-style shell with persistent sidebar: **New Compare**, **History**, **Exports**
@@ -79,18 +99,20 @@ If WebView2 is unavailable, the app falls back to opening the default browser.
 }
 ```
 
+The `mode` option is one of `"rows"`, `"table"`, or `"text"`.
+
 ## Structure
 
 ```
 main.go    HTTP server + API + WebView2 shell
+embed.go   Embeds ui/dist SPA build into the binary
 central/   Central SQLite store (history, exports)
 diff/      Myers text diff
 parse/     Streaming readers (CSV/TSV/TXT, XLSX/XLSM)
 job/       Async comparison job engine + runner
 store/     SQLite-backed result store (batched writes)
 export/    Export writers (CSV, JSONL, XLSX, HTML report)
-embed.go   Embeds ui/dist SPA build into the binary
-ui/        React + TypeScript SPA (built with npm, output to ui/dist)
+ui/        React + TypeScript SPA (Vite, builds to ui/dist)
 ```
 
 ## Build
@@ -108,6 +130,8 @@ $env:CGO_ENABLED = "1"
 go build -trimpath -ldflags "-H windowsgui" -o differ-pro.exe .
 ```
 
+> CI (`.github/workflows/build.yml`) builds a Windows binary on every push to `main` using `rsrc` for the icon, and uploads it as an artifact.
+
 ## Tests
 
 ```sh
@@ -123,3 +147,7 @@ Large files are handled by streaming readers (no `ReadAll`/`GetRows`) and batche
 | CSV / TSV / TXT | ✅ |
 | XLSX / XLSM | ✅ |
 | XLS / XLSB / ODS | ❌ (not yet) |
+
+## License
+
+All rights reserved. No license is granted.

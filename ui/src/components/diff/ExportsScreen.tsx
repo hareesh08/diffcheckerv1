@@ -72,7 +72,10 @@ export function ExportsScreen() {
         {loading ? (
           <div className="space-y-2 p-5">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 w-full rounded-lg border border-border bg-card skeleton" />
+              <div
+                key={i}
+                className="h-14 w-full rounded-lg border border-border bg-card skeleton"
+              />
             ))}
           </div>
         ) : exports.length === 0 ? (

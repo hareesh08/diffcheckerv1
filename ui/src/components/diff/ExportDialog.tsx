@@ -133,7 +133,9 @@ export function ExportDialog({
                   <span
                     className={cn(
                       "mt-0.5 block text-[9px] leading-tight",
-                      format === f.id ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground/70",
+                      format === f.id
+                        ? "text-amber-600 dark:text-amber-400"
+                        : "text-muted-foreground/70",
                     )}
                   >
                     {f.desc}
