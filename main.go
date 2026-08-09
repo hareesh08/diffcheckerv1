@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"diffchecker/central"
@@ -531,7 +532,15 @@ func handleExportsDelete(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]any{"status": "deleted"})
 }
 
+func initDPIAware() {
+	user32 := syscall.NewLazyDLL("user32.dll")
+	setProcessDpiAwarenessContext := user32.NewProc("SetProcessDpiAwarenessContext")
+	// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = -4 (as opaque pointer)
+	setProcessDpiAwarenessContext.Call(uintptr(0xFFFFFFFFFFFFFFFC))
+}
+
 func main() {
+	initDPIAware()
 	local := flag.Bool("local", true, "bind to localhost only (default)")
 	network := flag.String("network", "", "bind address (e.g. 0.0.0.0 for all interfaces, overrides --local)")
 	logsFlag := flag.Bool("logs", false, "enable verbose request logging")
@@ -611,7 +620,7 @@ func main() {
 		}
 	}()
 
-	runUI(bindHost + ":8080")
+	runUI("127.0.0.1:8080")
 
 	log.Println("Shutting down...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
