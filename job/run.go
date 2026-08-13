@@ -115,17 +115,15 @@ func runText(ctx context.Context, j *Job, done func(Status, string), rw *store.R
 
 	res := 1
 	origIdx, newIdx := 0, 0
-	emit := func(status string, oVal, nVal string, summary *Summary) {
+	emit := func(status string, oVal, nVal string, summary *Summary) error {
 		if oVal != "" || status != "added" {
 			if err := rw.PutRow("original", store.Row{Number: res, Values: []string{oVal}}); err != nil {
-				done(StatusFailed, err.Error())
-				return
+				return err
 			}
 		}
 		if nVal != "" || status != "deleted" {
 			if err := rw.PutRow("changed", store.Row{Number: res, Values: []string{nVal}}); err != nil {
-				done(StatusFailed, err.Error())
-				return
+				return err
 			}
 		}
 		t := "equal"
@@ -140,8 +138,7 @@ func runText(ctx context.Context, j *Job, done func(Status, string), rw *store.R
 		if err := rw.Put(res, t, []store.Change{
 			{RowNumber: res, Ref: "line" + itoa(res), Old: oVal, New: nVal, Type: status},
 		}); err != nil {
-			done(StatusFailed, err.Error())
-			return
+			return err
 		}
 		switch status {
 		case "equal":
@@ -155,6 +152,7 @@ func runText(ctx context.Context, j *Job, done func(Status, string), rw *store.R
 			summary.DeletedRows++
 		}
 		res++
+		return nil
 	}
 
 	i := 0
@@ -176,7 +174,10 @@ func runText(ctx context.Context, j *Job, done func(Status, string), rw *store.R
 			if newIdx < len(changed) {
 				nVal = changed[newIdx]
 			}
-			emit("equal", oVal, nVal, &j.Summary)
+			if err := emit("equal", oVal, nVal, &j.Summary); err != nil {
+				done(StatusFailed, err.Error())
+				return
+			}
 			origIdx++
 			newIdx++
 			i++
@@ -211,12 +212,18 @@ func runText(ctx context.Context, j *Job, done func(Status, string), rw *store.R
 				case new != "":
 					status = "added"
 				}
-				emit(status, old, new, &j.Summary)
+				if err := emit(status, old, new, &j.Summary); err != nil {
+					done(StatusFailed, err.Error())
+					return
+				}
 			}
 			origIdx += len(dels)
 			newIdx += len(ins)
 		case "insert":
-			emit("added", "", ops[i].Text, &j.Summary)
+			if err := emit("added", "", ops[i].Text, &j.Summary); err != nil {
+				done(StatusFailed, err.Error())
+				return
+			}
 			newIdx++
 			i++
 		}
@@ -381,6 +388,11 @@ func runTable(ctx context.Context, j *Job, done func(Status, string), opts Optio
 
 	oCol, oRec, oErr := readHeader(os, opts.HeaderRow)
 	nCol, nRec, nErr := readHeader(ns, opts.HeaderRow)
+
+	if err := rw.PutColumns(oCol, nCol); err != nil {
+		done(StatusFailed, err.Error())
+		return
+	}
 
 	oRowNum, nRowNum := 1, 1
 	// res is the monotonic result-row counter. Unlike oRowNum/nRowNum it never

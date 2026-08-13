@@ -195,7 +195,10 @@ func (db *DB) DeleteExport(id int64) error {
 
 // Helper to build a JSON column value.
 func JSON(v any) string {
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
 	return string(b)
 }
 

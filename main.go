@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -65,6 +66,39 @@ type uploadResponse struct {
 	Size int64  `json:"size"`
 }
 
+func isLocalhost(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	return host == "127.0.0.1" || host == "::1"
+}
+
+func encodeJSON(w http.ResponseWriter, v any) bool {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("json encode error: %v", err)
+		http.Error(w, "encode error", http.StatusInternalServerError)
+		return false
+	}
+	return true
+}
+
+func safeMkdirAll(path string, perm os.FileMode) error {
+	if err := os.MkdirAll(path, perm); err != nil {
+		return fmt.Errorf("mkdir %s: %w", path, err)
+	}
+	return nil
+}
+
+func safeMaxBytes(r *http.Request) error {
+	if r.Body == nil {
+		return nil
+	}
+	r.Body = http.MaxBytesReader(nil, r.Body, maxUploadBytes)
+	return nil
+}
+
 func splitLines(s string) []string {
 	if s == "" {
 		return nil
@@ -77,14 +111,17 @@ func handleDiff(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if err := safeMaxBytes(r); err != nil {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
 	var req diffRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	ops := diff.Myers(splitLines(req.Original), splitLines(req.Changed))
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(diffResponse{Ops: ops})
+	encodeJSON(w, diffResponse{Ops: ops})
 }
 
 func handleUpload(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +150,10 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	os.MkdirAll(uploadsDir, 0755)
+	if err := safeMkdirAll(uploadsDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	id := uuid.NewString()
 	dstPath := filepath.Join(uploadsDir, id+ext)
 	dst, err := os.Create(dstPath)
@@ -130,9 +170,8 @@ func handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(uploadResponse{
+	encodeJSON(w, uploadResponse{
 		ID:   id,
-		Path: dstPath,
 		Name: header.Filename,
 		Size: n,
 	})
@@ -143,6 +182,10 @@ func handleSheets(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if err := safeMaxBytes(r); err != nil {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
 	var req struct {
 		Path string `json:"path"`
 	}
@@ -150,9 +193,24 @@ func handleSheets(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if req.Path == "" {
+		http.Error(w, "path required", http.StatusBadRequest)
+		return
+	}
+	abs, err := filepath.Abs(req.Path)
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	uploadsAbs, _ := filepath.Abs(uploadsDir)
+	rel, err := filepath.Rel(uploadsAbs, abs)
+	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		http.Error(w, "path must be inside uploads", http.StatusBadRequest)
+		return
+	}
 	ext := strings.ToLower(filepath.Ext(req.Path))
 	if ext == ".csv" || ext == ".tsv" || ext == ".txt" {
-		json.NewEncoder(w).Encode(struct {
+		encodeJSON(w, struct {
 			Sheets []string `json:"sheets"`
 		}{[]string{"Sheet1"}})
 		return
@@ -162,8 +220,7 @@ func handleSheets(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(struct {
+	encodeJSON(w, struct {
 		Sheets []string `json:"sheets"`
 	}{names})
 }
@@ -173,10 +230,16 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if err := safeMaxBytes(r); err != nil {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
 	var req struct {
-		OriginalPath string `json:"originalPath"`
-		ChangedPath  string `json:"changedPath"`
-		SheetName    string `json:"sheetName"`
+		OriginalPath string      `json:"originalPath"`
+		ChangedPath  string      `json:"changedPath"`
+		OriginalName string      `json:"originalName"`
+		ChangedName  string      `json:"changedName"`
+		SheetName    string      `json:"sheetName"`
 		Options      job.Options `json:"options"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -188,12 +251,41 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	os.MkdirAll(jobsDir, 0755)
-	j := registry.New(req.Options, filepath.Base(req.OriginalPath), filepath.Base(req.ChangedPath),
+	for _, p := range []string{req.OriginalPath, req.ChangedPath} {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			http.Error(w, "invalid path", http.StatusBadRequest)
+			return
+		}
+		uploadsAbs, _ := filepath.Abs(uploadsDir)
+		rel, err := filepath.Rel(uploadsAbs, abs)
+		if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+			http.Error(w, "path must be inside uploads", http.StatusBadRequest)
+			return
+		}
+	}
+
+	origName := req.OriginalName
+	if origName == "" {
+		origName = filepath.Base(req.OriginalPath)
+	}
+	changedName := req.ChangedName
+	if changedName == "" {
+		changedName = filepath.Base(req.ChangedPath)
+	}
+
+	if err := safeMkdirAll(jobsDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	j := registry.New(req.Options, origName, changedName,
 		req.OriginalPath, req.ChangedPath, "")
 	// create job dir
 	jobDir := filepath.Join(jobsDir, j.ID)
-	os.MkdirAll(jobDir, 0755)
+	if err := safeMkdirAll(jobDir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	j.StorePath = filepath.Join(jobDir, "results.db")
 
 	ctx, _ := registry.Cancellable(j.ID)
@@ -209,20 +301,22 @@ func handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		}()
 		job.Run(ctx, j)
 	}()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"jobId": j.ID})
+	encodeJSON(w, map[string]string{"jobId": j.ID})
 }
 
 func handleJobStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 	id = strings.TrimSuffix(id, "/status")
-	j, ok := registry.Get(id)
+	j, ok := findJob(id)
 	if !ok {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(j.Snapshot())
+	encodeJSON(w, j.Snapshot())
 }
 
 func handleJobCancel(w http.ResponseWriter, r *http.Request) {
@@ -237,9 +331,13 @@ func handleJobCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleJobRows(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 	id = strings.TrimSuffix(id, "/rows")
-	j, ok := registry.Get(id)
+	j, ok := findJob(id)
 	if !ok {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
@@ -272,13 +370,21 @@ func handleJobRows(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	oCol, nCol, _ := db.Columns(j.ID)
+	var columns map[string]any
+	if oCol != nil || nCol != nil {
+		columns = map[string]any{
+			"original": oCol,
+			"changed":  nCol,
+		}
+	}
+	encodeJSON(w, map[string]any{
 		"filter":    filter,
 		"page":      page,
 		"pageSize":  pageSize,
 		"totalRows": total,
 		"rows":      rows,
+		"columns":   columns,
 	})
 }
 
@@ -289,7 +395,7 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 	id = strings.TrimSuffix(id, "/export")
-	j, ok := registry.Get(id)
+	j, ok := findJob(id)
 	if !ok {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
@@ -319,12 +425,14 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 
 	// Record the export in history.
 	if centralDB != nil {
-		_ = centralDB.AddExport(central.Export{
+		if err := centralDB.AddExport(central.Export{
 			JobID:  j.ID,
 			Name:   name,
 			Format: req.Format,
 			Filter: req.Filter,
-		})
+		}); err != nil {
+			log.Printf("warning: cannot record export: %v", err)
+		}
 	}
 
 	switch export.Format(req.Format) {
@@ -366,7 +474,7 @@ func handleExport(w http.ResponseWriter, r *http.Request) {
 func handleReport(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 	id = strings.TrimSuffix(id, "/report")
-	j, ok := registry.Get(id)
+	j, ok := findJob(id)
 	if !ok {
 		http.Error(w, "job not found", http.StatusNotFound)
 		return
@@ -387,6 +495,48 @@ func handleReport(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+}
+
+// findJob returns a live in-memory job if present, otherwise reconstructs a
+// terminal (completed/failed) job from the persisted central store and the
+// on-disk results database. This lets history items be reopened after the
+// owning job has left the live in-memory registry (e.g. after a restart or
+// once the process moved on).
+func findJob(id string) (*job.Job, bool) {
+	if j, ok := registry.Get(id); ok {
+		return j, true
+	}
+	if centralDB == nil {
+		return nil, false
+	}
+	hj, err := centralDB.GetJob(id)
+	if err != nil {
+		return nil, false
+	}
+	if hj.Status != string(job.StatusCompleted) && hj.Status != string(job.StatusFailed) {
+		// Only persisted terminal jobs have reusable results.
+		return nil, false
+	}
+	var opts job.Options
+	if err := json.Unmarshal([]byte(hj.Meta), &opts); err != nil {
+		return nil, false
+	}
+	var summary job.Summary
+	if err := json.Unmarshal([]byte(hj.Summary), &summary); err != nil {
+		return nil, false
+	}
+	return &job.Job{
+		ID:           hj.ID,
+		Status:       job.Status(hj.Status),
+		Mode:         hj.Mode,
+		OriginalName: hj.OriginalName,
+		ChangedName:  hj.ChangedName,
+		Options:      opts,
+		Summary:      summary,
+		StorePath:    store.JobDBPath(jobsDir, hj.ID),
+		CreatedAt:    hj.CreatedAt,
+		CompletedAt:  hj.CompletedAt,
+	}, true
 }
 
 // requireCentral ensures the central DB is available, else 503.
@@ -412,8 +562,7 @@ func handleHistoryList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"jobs": jobs})
+	encodeJSON(w, map[string]any{"jobs": jobs})
 }
 
 // handleHistorySub handles /api/history/{id}/name and DELETE /api/history/{id}
@@ -434,15 +583,13 @@ func handleHistorySub(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		encodeJSON(w, map[string]string{"status": "ok"})
 	case r.Method == http.MethodDelete:
 		if err := centralDB.DeleteJob(id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		encodeJSON(w, map[string]string{"status": "ok"})
 	default:
 		http.Error(w, "not found", http.StatusNotFound)
 	}
@@ -486,8 +633,7 @@ func handleJobsFinalize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "saved"})
+	encodeJSON(w, map[string]string{"status": "saved"})
 }
 
 
@@ -505,8 +651,7 @@ func handleExportsList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"exports": exports})
+	encodeJSON(w, map[string]any{"exports": exports})
 }
 
 // handleExportsDelete DELETE /api/exports/{id}
@@ -528,8 +673,7 @@ func handleExportsDelete(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"status": "deleted"})
+	encodeJSON(w, map[string]any{"status": "deleted"})
 }
 
 func initDPIAware() {
@@ -546,9 +690,15 @@ func main() {
 	logsFlag := flag.Bool("logs", false, "enable verbose request logging")
 	flag.Parse()
 
-	os.MkdirAll(uploadsDir, 0755)
-	os.MkdirAll(jobsDir, 0755)
-	os.MkdirAll(dataDir, 0755)
+	if err := safeMkdirAll(uploadsDir, 0755); err != nil {
+		log.Fatalf("cannot create uploads dir: %v", err)
+	}
+	if err := safeMkdirAll(jobsDir, 0755); err != nil {
+		log.Fatalf("cannot create jobs dir: %v", err)
+	}
+	if err := safeMkdirAll(dataDir, 0755); err != nil {
+		log.Fatalf("cannot create data dir: %v", err)
+	}
 	loadSettings()
 
 	if *logsFlag {
@@ -603,7 +753,10 @@ func main() {
 	}
 
 	httpServer = &http.Server{
-		Addr: bindHost + ":8080",
+		Addr:         bindHost + ":8080",
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if enableLogs.Load() {
 				start := time.Now()
@@ -656,7 +809,7 @@ func runUI(url string) {
 
 // openBrowser opens the given URL in the user's default browser.
 func openBrowser(url string) {
-	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", "http://"+url)
+	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", "\"http://"+url+"\"")
 	cmd.Start()
 }
 
@@ -676,14 +829,16 @@ func loadSettings() {
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(b, &appSettings)
+	if err := json.Unmarshal(b, &appSettings); err != nil {
+		log.Printf("warning: cannot parse settings: %v", err)
+	}
 }
 
-func saveSettings() {
+func saveSettings() error {
 	settingsMu.Lock()
 	defer settingsMu.Unlock()
 	b, _ := json.Marshal(appSettings)
-	_ = os.WriteFile(filepath.Join(dataDir, "settings.json"), b, 0644)
+	return os.WriteFile(filepath.Join(dataDir, "settings.json"), b, 0644)
 }
 
 func handleShutdown(w http.ResponseWriter, r *http.Request) {
@@ -691,8 +846,11 @@ func handleShutdown(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "shutting down"})
+	if !isLocalhost(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	encodeJSON(w, map[string]string{"status": "shutting down"})
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -706,14 +864,16 @@ func handleRestart(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
+	if !isLocalhost(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	encodeJSON(w, map[string]string{"status": "restarting"})
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		httpServer.Shutdown(ctx)
-		// re-exec same binary
 		cmd := exec.Command(os.Args[0], os.Args[1:]...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -728,8 +888,7 @@ func handleSettingsGet(w http.ResponseWriter, r *http.Request) {
 	}
 	settingsMu.Lock()
 	defer settingsMu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(appSettings)
+	encodeJSON(w, appSettings)
 }
 
 func handleSettingsLogs(w http.ResponseWriter, r *http.Request) {
@@ -748,9 +907,11 @@ func handleSettingsLogs(w http.ResponseWriter, r *http.Request) {
 	settingsMu.Lock()
 	appSettings.Logs = body.Enabled
 	settingsMu.Unlock()
-	saveSettings()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"logs": body.Enabled})
+	if err := saveSettings(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	encodeJSON(w, map[string]any{"logs": body.Enabled})
 }
 
 func handleSettingsBindMode(w http.ResponseWriter, r *http.Request) {
@@ -772,9 +933,11 @@ func handleSettingsBindMode(w http.ResponseWriter, r *http.Request) {
 	settingsMu.Lock()
 	appSettings.BindMode = body.Mode
 	settingsMu.Unlock()
-	saveSettings()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "restarting"})
+	if err := saveSettings(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	encodeJSON(w, map[string]string{"status": "restarting"})
 	go func() {
 		time.Sleep(200 * time.Millisecond)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -801,7 +964,10 @@ func handleSettingsLogsStream(w http.ResponseWriter, r *http.Request) {
 	logBufferMu.Lock()
 	lastIdx = len(logBuffer)
 	for _, entry := range logBuffer {
-		fmt.Fprintf(w, "data: %s\n\n", entry)
+		if _, err := fmt.Fprintf(w, "data: %s\n\n", entry); err != nil {
+			logBufferMu.Unlock()
+			return
+		}
 	}
 	logBufferMu.Unlock()
 	flusher.Flush()
@@ -817,13 +983,16 @@ func handleSettingsLogsStream(w http.ResponseWriter, r *http.Request) {
 			logBufferMu.Lock()
 			if lastIdx < len(logBuffer) {
 				for i := lastIdx; i < len(logBuffer); i++ {
-					fmt.Fprintf(w, "data: %s\n\n", logBuffer[i])
+					if _, err := fmt.Fprintf(w, "data: %s\n\n", logBuffer[i]); err != nil {
+						logBufferMu.Unlock()
+						return
+					}
 				}
-				lastIdx = len(logBuffer)
-			}
-			logBufferMu.Unlock()
-			flusher.Flush()
+			lastIdx = len(logBuffer)
 		}
+		logBufferMu.Unlock()
+		flusher.Flush()
+	}
 	}
 }
 

@@ -51,6 +51,7 @@ func Open(path string) (*DB, error) {
 PRAGMA busy_timeout=5000;
 CREATE TABLE IF NOT EXISTS rows (job_id TEXT, side TEXT, row_number INTEGER, row_json BLOB, row_hash TEXT, PRIMARY KEY(job_id, side, row_number));
 CREATE TABLE IF NOT EXISTS results (job_id TEXT, row_number INTEGER PRIMARY KEY, status TEXT, changes_json BLOB);
+CREATE TABLE IF NOT EXISTS meta (job_id TEXT, key TEXT, value BLOB, PRIMARY KEY(job_id, key));
 CREATE INDEX IF NOT EXISTS results_job_status ON results(job_id, status);
 `)
 	if err != nil { db.Close(); return nil, err }
@@ -66,6 +67,7 @@ type ResultWriter struct {
 	tx        *sql.Tx
 	stmt      *sql.Stmt
 	rowStmt   *sql.Stmt
+	metaStmt  *sql.Stmt
 	batchSize int
 	batched   int
 }
@@ -99,9 +101,17 @@ func (w *ResultWriter) begin() error {
 		tx.Rollback()
 		return err
 	}
+	metaStmt, err := tx.Prepare(`INSERT OR REPLACE INTO meta(job_id,key,value) VALUES(?,?,?)`)
+	if err != nil {
+		stmt.Close()
+		rowStmt.Close()
+		tx.Rollback()
+		return err
+	}
 	w.tx = tx
 	w.stmt = stmt
 	w.rowStmt = rowStmt
+	w.metaStmt = metaStmt
 	w.batched = 0
 	return nil
 }
@@ -126,8 +136,23 @@ func (w *ResultWriter) closeStmts() error {
 	if rerr := w.rowStmt.Close(); err == nil {
 		err = rerr
 	}
+	if rerr := w.metaStmt.Close(); err == nil {
+		err = rerr
+	}
 	w.stmt = nil
 	w.rowStmt = nil
+	w.metaStmt = nil
+	return err
+}
+
+// PutColumns stores the resolved column headers (original and changed) for the
+// job inside the writer's transaction, so they persist atomically with results.
+func (w *ResultWriter) PutColumns(original, changed []string) error {
+	b, err := json.Marshal(map[string][]string{"original": original, "changed": changed})
+	if err != nil {
+		return err
+	}
+	_, err = w.metaStmt.Exec(w.jobID, "columns", b)
 	return err
 }
 
@@ -181,6 +206,27 @@ func (w *ResultWriter) Close() error {
 	err := w.tx.Commit()
 	w.tx = nil
 	return err
+}
+
+// Columns returns the persisted column headers (original and changed) for a
+// job, or nil values when none were stored (e.g. rows/text modes).
+func (db *DB) Columns(jobID string) (original, changed []string, err error) {
+	var raw []byte
+	err = db.conn.QueryRow(`SELECT value FROM meta WHERE job_id=? AND key='columns'`, jobID).Scan(&raw)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, err
+	}
+	var cols struct {
+		Original []string `json:"original"`
+		Changed  []string `json:"changed"`
+	}
+	if err := json.Unmarshal(raw, &cols); err != nil {
+		return nil, nil, err
+	}
+	return cols.Original, cols.Changed, nil
 }
 
 func (db *DB) Summary(jobID string) (Summary, error) {

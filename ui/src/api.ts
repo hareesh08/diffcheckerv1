@@ -61,6 +61,10 @@ export type RowsResponse = {
   pageSize: number;
   totalRows: number;
   rows: ResultRow[];
+  columns?: {
+    original?: string[];
+    changed?: string[];
+  };
 };
 
 type JobRow = {
@@ -95,6 +99,8 @@ export function getSheets(path: string): Promise<{ sheets: string[] }> {
 export function createJob(body: {
   originalPath: string;
   changedPath: string;
+  originalName?: string;
+  changedName?: string;
   options: JobOptionsInput;
 }): Promise<{ jobId: string }> {
   return request<{ jobId: string }>("/api/jobs", {

@@ -51,6 +51,10 @@ export function ResultsScreen({
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [rows, setRows] = useState<ResultRow[]>([]);
   const [totalRows, setTotalRows] = useState(0);
+  const [sheetColumns, setSheetColumns] = useState<{
+    original?: string[];
+    changed?: string[];
+  } | null>(null);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState<string | null>(null);
@@ -62,13 +66,9 @@ export function ResultsScreen({
 
   const started = useRef(false);
   const rowRefs = useRef(new Map<string, HTMLTableRowElement>());
-
-  useEffect(() => {
-    if (expandedRow === null) return;
-    const key = String(expandedRow);
-    const row = rowRefs.current.get(key);
-    if (row) row.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-  }, [expandedRow, page]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const backoffRef = useRef(800);
+  const jobIdRef = useRef<string | null>(null);
 
   const loadRows = useCallback(async (job: string, pageNum: number, flt: string, ps: number) => {
     try {
@@ -79,9 +79,16 @@ export function ResultsScreen({
       });
       setRows(data.rows || []);
       setTotalRows(data.totalRows || 0);
+      if (data.columns) setSheetColumns(data.columns);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load rows");
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
   }, []);
 
   useEffect(() => {
@@ -115,31 +122,42 @@ export function ResultsScreen({
         const created = await createJob({
           originalPath: setup.fileA.path,
           changedPath: setup.fileB.path,
+          originalName: setup.fileA.name,
+          changedName: setup.fileB.name,
           options,
         });
         setJobId(created.jobId);
-        const timer = setInterval(async () => {
+        jobIdRef.current = created.jobId;
+        backoffRef.current = 800;
+        pollRef.current = setInterval(async () => {
           try {
             const j = await getJobStatus(created.jobId);
             setStatus(j);
             if (j.status === "completed") {
-              clearInterval(timer);
+              if (pollRef.current) clearInterval(pollRef.current);
               setPage(1);
               loadRows(created.jobId, 1, "all", pageSize);
               finalizeJob(created.jobId).catch(() => {});
               onFinished?.(created.jobId);
             } else if (j.status === "failed" || j.status === "cancelled") {
-              clearInterval(timer);
+              if (pollRef.current) clearInterval(pollRef.current);
             }
           } catch {
             /* transient */
           }
-        }, 800);
+        }, backoffRef.current);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to start comparison");
       }
     })();
   }, [setup, loadRows, existingJobId, onFinished, pageSize, historySummary]);
+
+  useEffect(() => {
+    if (expandedRow === null) return;
+    const key = String(expandedRow);
+    const row = rowRefs.current.get(key);
+    if (row) row.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  }, [expandedRow, page]);
 
   useEffect(() => {
     if (jobId && status?.status === "completed") {
@@ -165,10 +183,22 @@ export function ResultsScreen({
     const len = Math.max(r.originalValues?.length ?? 0, r.changedValues?.length ?? 0);
     if (len > totalColumns) totalColumns = len;
   }
-  const columns: string[] = [];
-  for (let i = 0; i < totalColumns; i++) {
-    columns.push(colLetter(i + 1));
-  }
+  // Prefer real sheet column headers (original-first union with changed-only
+  // columns appended), falling back to spreadsheet letters when the job has no
+  // header (e.g. rows/text modes or older persist stores).
+  const columns: string[] = sheetColumns?.original?.length
+    ? (() => {
+        const union = [...sheetColumns.original];
+        const seen = new Set(union);
+        for (const c of sheetColumns.changed ?? []) {
+          if (!seen.has(c)) {
+            union.push(c);
+            seen.add(c);
+          }
+        }
+        return union;
+      })()
+    : Array.from({ length: totalColumns }, (_, i) => colLetter(i + 1));
 
   const expandedRowData =
     expandedRow !== null ? rows.find((r) => r.rowNumber === expandedRow) : null;
